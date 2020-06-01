@@ -2,13 +2,10 @@
 #include <sstream>
 
 #include <ipfs/client.h>
-#include <curl/curl.h>
 
 
 int main(int, char**) {
    
-	CURL * curl;
-	curl_global_init(CURL_GLOBAL_DEFAULT);
 	std::stringstream contents;
 
 	ipfs::Client client("localhost", 5001);
