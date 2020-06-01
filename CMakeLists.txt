@@ -51,9 +51,111 @@ if (OPENSSL_ROOT_DIR)
   set(_CMAKE_ARGS_OPENSSL_ROOT_DIR "-DOPENSSL_ROOT_DIR:PATH=${OPENSSL_ROOT_DIR}")
 endif()
 
+# Builds Microsoft.GSL
+ExternalProject_Add(Microsoft.GSL
+  PREFIX Microsoft.GSL
+  SOURCE_DIR "${THIRDPARTY_DIR}/GSL"
+  CMAKE_CACHE_ARGS
+        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/GSL
+        -DGSL_TEST:BOOL=OFF
+)
+set(_FINDPACKAGE_GSL_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/GSL/include")
+
+# Builds spdlog v1.4.2
+ExternalProject_Add(spdlog
+  PREFIX spdlog
+  SOURCE_DIR "${THIRDPARTY_DIR}/spdlog"
+  CMAKE_CACHE_ARGS
+        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/spdlog
+)
+set(_FINDPACKAGE_SPDLOG_CONFIG_DIR "${CMAKE_CURRENT_BINARY_DIR}/spdlog/lib/spdlog/cmake")
+set(_FINDPACKAGE_SPDLOG_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/spdlog/include")
+
+# Builds tsl_hat_trie 343e0dac54fc8491065e8a059a02db9a2b1248ab
+ExternalProject_Add(tsl_hat_trie
+  PREFIX tsl_hat_trie
+  SOURCE_DIR "${THIRDPARTY_DIR}/hat-trie"
+  CMAKE_CACHE_ARGS
+        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/hat-trie
+)
+set(_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR "${CMAKE_CURRENT_BINARY_DIR}/hat-trie/lib/cmake/tsl_hat_trie")
+
+set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH} ${CMAKE_CURRENT_BINARY_DIR}/hat-trie/lib/cmake/tsl_hat_trie")
+message("${CMAKE_PREFIX_PATH}")
+
+# Builds Boost.DI c5287ee710ad90f5286d0cc2b9e49b72d89267a6
+ExternalProject_Add(Boost.DI
+  PREFIX Boost.DI
+  SOURCE_DIR "${THIRDPARTY_DIR}/Boost.DI"
+  CMAKE_CACHE_ARGS
+        -DBOOST_DI_OPT_BUILD_TESTS:BOOL=OFF
+        -DBOOST_DI_OPT_BUILD_EXAMPLES:BOOL=OFF
+        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/Boost.DI
+)
+set(_FINDPACKAGE_BOOST_DI_CONFIG_DIR "${CMAKE_CURRENT_BINARY_DIR}/Boost.DI/lib/cmake/Boost.DI")
+
+# BOOST library 
+set(Boost_USE_STATIC_LIBS OFF) 
+set(Boost_USE_MULTITHREADED ON)  
+set(Boost_USE_STATIC_RUNTIME OFF) 
+find_package(Boost REQUIRED COMPONENTS date_time filesystem random) # header only libraries must not be added here
+
+#OpenSSL library
+set(CMAKE_USE_OPENSSL ON)
+if(CMAKE_USE_OPENSSL)
+  find_package(OpenSSL REQUIRED)
+  set(SSL_ENABLED ON)
+  set(USE_OPENSSL ON)
+endif()
+
+
+set(tsl_hat_trie_DIR "${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}")
+find_package(tsl_hat_trie  REQUIRED)
+# Builds libp2p
+
+ExternalProject_Add(libp2p
+  PREFIX libp2p
+  SOURCE_DIR "${THIRDPARTY_DIR}/libp2p"
+  CMAKE_CACHE_ARGS
+        ${_CMAKE_ARGS_OPENSSL_ROOT_DIR}
+        -DCMAKE_USE_OPENSSL:BOOL=ON
+        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/libp2p
+        -DTESTING:BOOL=OFF 
+        -DEXPOSE_MOCKS:BOOL=ON
+        -DHUNTER_ENABLED:BOOL=OFF
+        -DBUILD_EXAMPLES:BOOL=OFF
+        -DProtobuf_DIR:PATH=${_FINDPACKAGE_PROTOBUF_CONFIG_DIR}
+        -DProtobuf_INCLUDE_DIR:PATH=${_FINDPACKAGE_PROTOBUF_INCLUDE_DIR}
+        -DProtobuf_LIBRARIES:PATH=${_FINDPACKAGE_PROTOBUF_LIB_DIR}
+        -Dspdlog_DIR:PATH=${_FINDPACKAGE_SPDLOG_CONFIG_DIR}
+        -DBoost.DI_DIR:PATH=${_FINDPACKAGE_BOOST_DI_CONFIG_DIR}
+        -DBOOST_ROOT:PATH="${BOOST_ROOT}"
+        -DBOOST_INCLUDE_DIR:PATH="${BOOST_INCLUDE_DIR}"
+        -DBOOST_LIBRARY_DIR:PATH="${BOOST_LIBRARY_DIR}"        
+        -Dtsl_hat_trie_ROOT:PATH="${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}"        
+        -DCMAKE_CXX_FLAGS:STRING=${CMAKE_CXX_FLAGS}\ -I\ ${BOOST_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_GSL_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}\ -I\ ${_FINDPACKAGE_SPDLOG_INCLUDE_DIR}\ -I\ \\\"${OPENSSL_ROOT_DIR}/include\\\"\ -I\ ${_FINDPACKAGE_PROTOBUF_INCLUDE_DIR}
+
+  DEPENDS protobuf spdlog tsl_hat_trie Boost.DI 
+)
+
+
+set(libp2p_DIR "${CMAKE_CURRENT_BINARY_DIR}/libp2p/lib/cmake/libp2p")
+
+# Find packages for common
+#message("libp2p_DIR=" ${libp2p_DIR})
+#find_package(libp2p CONFIG REQUIRED)
+
+#set(spdlog_DIR "${_FINDPACKAGE_SPDLOG_CONFIG_DIR}")
+#find_package(spdlog CONFIG REQUIRED)
+set(tsl_hat_trie_DIR "${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}")
+find_package(tsl_hat_trie CONFIG REQUIRED)
+
+
 include_directories(${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/include)
+
 #message(${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/include)
-add_executable(ipfs-pubsub  "${CMAKE_SOURCE_DIR}/src/test/test.cpp")
+#add_executable(ipfs-pubsub  "${CMAKE_SOURCE_DIR}/src/test/test.cpp")
 
 #message("${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/Release/ipfs-http-client")
-target_link_libraries(ipfs-pubsub "${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/Release/ipfs-http-client")
+
+#target_link_libraries(ipfs-pubsub "${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/Release/ipfs-http-client")
