@@ -7,10 +7,10 @@
 
 cmake_minimum_required(VERSION 3.10)
 
-project(ipfs-pubsub VERSION 1.0)
+project(ipfs-pubsub C CXX)
 
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED True)
+#set(CMAKE_CXX_STANDARD 11)
+#set(CMAKE_CXX_STANDARD_REQUIRED True)
 include(cmake/functions.cmake)
 include(ExternalProject)
 #include(${CMAKE_ROOT}/Modules/ExternalProject.cmake)
@@ -24,10 +24,12 @@ find_path(JSON_FOR_MODERN_CXX_INCLUDE_DIR NAMES nlohmann/json.hpp)
 include_directories(${JSON_FOR_MODERN_CXX_INCLUDE_DIR})
 mark_as_advanced(JSON_FOR_MODERN_CXX_INCLUDE_DIR)
 
+set(PROTOBUF_SRC_DIR "${PROTOBUF_ROOT_DIR}/cmake")
+
 # Build protobuf project from the git submodule.
 ExternalProject_Add(protobuf
   PREFIX protobuf
-  SOURCE_DIR "${THIRDPARTY_DIR}/grpc/third_party/protobuf/cmake"
+  SOURCE_DIR "${PROTOBUF_SRC_DIR}"
   CMAKE_CACHE_ARGS
         -Dprotobuf_BUILD_TESTS:BOOL=OFF
         -Dprotobuf_WITH_ZLIB:BOOL=OFF
@@ -80,8 +82,8 @@ ExternalProject_Add(tsl_hat_trie
 )
 set(_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR "${CMAKE_CURRENT_BINARY_DIR}/hat-trie/lib/cmake/tsl_hat_trie")
 
-set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH} ${CMAKE_CURRENT_BINARY_DIR}/hat-trie/lib/cmake/tsl_hat_trie")
-message("${CMAKE_PREFIX_PATH}")
+#set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH} ${CMAKE_CURRENT_BINARY_DIR}/hat-trie/lib/cmake/tsl_hat_trie")
+#message("${CMAKE_PREFIX_PATH}")
 
 # Builds Boost.DI c5287ee710ad90f5286d0cc2b9e49b72d89267a6
 ExternalProject_Add(Boost.DI
@@ -108,9 +110,8 @@ if(CMAKE_USE_OPENSSL)
   set(USE_OPENSSL ON)
 endif()
 
-
-set(tsl_hat_trie_DIR "${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}")
-find_package(tsl_hat_trie  REQUIRED)
+#set(tsl_hat_trie_DIR "${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}")
+#find_package(tsl_hat_trie  REQUIRED)
 # Builds libp2p
 
 ExternalProject_Add(libp2p
@@ -121,6 +122,7 @@ ExternalProject_Add(libp2p
         -DCMAKE_USE_OPENSSL:BOOL=ON
         -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/libp2p
         -DTESTING:BOOL=OFF 
+        -DBUILD_TESTING:BOOL=OFF
         -DEXPOSE_MOCKS:BOOL=ON
         -DHUNTER_ENABLED:BOOL=OFF
         -DBUILD_EXAMPLES:BOOL=OFF
@@ -132,8 +134,9 @@ ExternalProject_Add(libp2p
         -DBOOST_ROOT:PATH="${BOOST_ROOT}"
         -DBOOST_INCLUDE_DIR:PATH="${BOOST_INCLUDE_DIR}"
         -DBOOST_LIBRARY_DIR:PATH="${BOOST_LIBRARY_DIR}"        
-        -Dtsl_hat_trie_ROOT:PATH="${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}"        
-        -DCMAKE_CXX_FLAGS:STRING=${CMAKE_CXX_FLAGS}\ -I\ ${BOOST_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_GSL_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}\ -I\ ${_FINDPACKAGE_SPDLOG_INCLUDE_DIR}\ -I\ \\\"${OPENSSL_ROOT_DIR}/include\\\"\ -I\ ${_FINDPACKAGE_PROTOBUF_INCLUDE_DIR}
+        -Dtsl_hat_trie_DIR:PATH=${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}
+        -DGSL_ROOT:PATH="${CMAKE_CURRENT_BINARY_DIR}/GSL"      
+        -DCMAKE_CXX_FLAGS:STRING=${CMAKE_CXX_FLAGS}\ -I\ ${_FINDPACKAGE_GSL_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}\ -I\ ${_FINDPACKAGE_SPDLOG_INCLUDE_DIR}\ -I\ \\\"${OPENSSL_INCLUDE_DIR}\\\"\ -I\ ${_FINDPACKAGE_PROTOBUF_INCLUDE_DIR}
 
   DEPENDS protobuf spdlog tsl_hat_trie Boost.DI 
 )
@@ -147,8 +150,8 @@ set(libp2p_DIR "${CMAKE_CURRENT_BINARY_DIR}/libp2p/lib/cmake/libp2p")
 
 #set(spdlog_DIR "${_FINDPACKAGE_SPDLOG_CONFIG_DIR}")
 #find_package(spdlog CONFIG REQUIRED)
-set(tsl_hat_trie_DIR "${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}")
-find_package(tsl_hat_trie CONFIG REQUIRED)
+#set(tsl_hat_trie_DIR "${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}")
+#find_package(tsl_hat_trie CONFIG REQUIRED)
 
 
 include_directories(${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/include)
