@@ -16,7 +16,7 @@ include(ExternalProject)
 #include(${CMAKE_ROOT}/Modules/ExternalProject.cmake)
 
 
-set(THIRDPARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../geniustokens/thirdparty")
+set(THIRDPARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../GeniusTokens/thirdparty")
 set(JSON_FOR_MODERN_CXX_INCLUDE_DIR "${THIRDPARTY_DIR}/json")
 
 # Find json library
