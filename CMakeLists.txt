@@ -16,7 +16,7 @@ include(ExternalProject)
 #include(${CMAKE_ROOT}/Modules/ExternalProject.cmake)
 
 
-set(THIRDPARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../GeniusTokens/thirdparty")
+set(THIRDPARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/..")
 set(JSON_FOR_MODERN_CXX_INCLUDE_DIR "${THIRDPARTY_DIR}/json")
 
 # Find json library
@@ -24,6 +24,7 @@ find_path(JSON_FOR_MODERN_CXX_INCLUDE_DIR NAMES nlohmann/json.hpp)
 include_directories(${JSON_FOR_MODERN_CXX_INCLUDE_DIR})
 mark_as_advanced(JSON_FOR_MODERN_CXX_INCLUDE_DIR)
 
+set(PROTOBUF_ROOT_DIR "${THIRDPARTY_DIR}/grpc/third_party/protobuf")
 set(PROTOBUF_SRC_DIR "${PROTOBUF_ROOT_DIR}/cmake")
 
 # Build protobuf project from the git submodule.
