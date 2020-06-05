@@ -98,10 +98,11 @@ ExternalProject_Add(Boost.DI
 set(_FINDPACKAGE_BOOST_DI_CONFIG_DIR "${CMAKE_CURRENT_BINARY_DIR}/Boost.DI/lib/cmake/Boost.DI")
 
 # BOOST library 
-set(Boost_USE_STATIC_LIBS OFF) 
+set(Boost_USE_STATIC_LIBS ON) 
 set(Boost_USE_MULTITHREADED ON)  
 set(Boost_USE_STATIC_RUNTIME OFF) 
-find_package(Boost REQUIRED COMPONENTS date_time filesystem random) # header only libraries must not be added here
+set(Boost_ROOT ${BOOST_ROOT})
+#find_package(Boost REQUIRED COMPONENTS date_time filesystem random) # header only libraries must not be added here
 
 #OpenSSL library
 set(CMAKE_USE_OPENSSL ON)
@@ -114,7 +115,7 @@ endif()
 #set(tsl_hat_trie_DIR "${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}")
 #find_package(tsl_hat_trie  REQUIRED)
 # Builds libp2p
-
+message(${CMAKE_CXX_FLAGS})
 ExternalProject_Add(libp2p
   PREFIX libp2p
   SOURCE_DIR "${THIRDPARTY_DIR}/libp2p"
@@ -137,11 +138,13 @@ ExternalProject_Add(libp2p
         -DBoost_INCLUDE_DIR:PATH=${BOOST_INCLUDE_DIR}
         -DBoost_LIBRARY_DIR:PATH=${BOOST_LIBRARY_DIR}
         -Dtsl_hat_trie_DIR:PATH=${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}
-        -DGSL_ROOT:PATH="${CMAKE_CURRENT_BINARY_DIR}/GSL"      
+        -DGSL_ROOT:PATH=${CMAKE_CURRENT_BINARY_DIR}/GSL
+        -DGSL_DIR:PATH=${CMAKE_CURRENT_BINARY_DIR}/GSL
+        -DGSL_INCLUDE_DIR:PATH=${_FINDPACKAGE_GSL_INCLUDE_DIR}
         -DCMAKE_FIND_USE_PACKAGE_ROOT_PATH:BOOL=ON
-        -DCMAKE_CXX_FLAGS:STRING=${CMAKE_CXX_FLAGS}\ -I\ ${_FINDPACKAGE_GSL_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}\ -I\ ${_FINDPACKAGE_SPDLOG_INCLUDE_DIR}\ -I\ \\\"${OPENSSL_INCLUDE_DIR}\\\"\ -I\ ${_FINDPACKAGE_PROTOBUF_INCLUDE_DIR}
-
-  DEPENDS protobuf spdlog tsl_hat_trie Boost.DI 
+        -DCLANG_TIDY:BOOL=ON
+        -DCMAKE_CXX_FLAGS:STRING=-I\ ${_FINDPACKAGE_GSL_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}\ -I\ ${_FINDPACKAGE_SPDLOG_INCLUDE_DIR}\ -I\ \\\"${OPENSSL_INCLUDE_DIR}\\\"\ -I\ ${_FINDPACKAGE_PROTOBUF_INCLUDE_DIR}
+  DEPENDS protobuf spdlog tsl_hat_trie Boost.DI
 )
 
 
