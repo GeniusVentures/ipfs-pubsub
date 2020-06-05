@@ -9,13 +9,10 @@ cmake_minimum_required(VERSION 3.10)
 
 project(ipfs-pubsub C CXX)
 
-#set(CMAKE_CXX_STANDARD 11)
-#set(CMAKE_CXX_STANDARD_REQUIRED True)
 include(cmake/functions.cmake)
 include(ExternalProject)
-#include(${CMAKE_ROOT}/Modules/ExternalProject.cmake)
 
-
+# Set Third party directory 
 set(THIRDPARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/..")
 set(JSON_FOR_MODERN_CXX_INCLUDE_DIR "${THIRDPARTY_DIR}/json")
 
@@ -100,7 +97,7 @@ set(_FINDPACKAGE_BOOST_DI_CONFIG_DIR "${CMAKE_CURRENT_BINARY_DIR}/Boost.DI/lib/c
 # BOOST library 
 set(Boost_USE_STATIC_LIBS ON) 
 set(Boost_USE_MULTITHREADED ON)  
-set(Boost_USE_STATIC_RUNTIME OFF) 
+set(Boost_USE_STATIC_RUNTIME OFF)
 set(Boost_ROOT ${BOOST_ROOT})
 #find_package(Boost REQUIRED COMPONENTS date_time filesystem random) # header only libraries must not be added here
 
@@ -115,7 +112,7 @@ endif()
 #set(tsl_hat_trie_DIR "${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}")
 #find_package(tsl_hat_trie  REQUIRED)
 # Builds libp2p
-message(${CMAKE_CXX_FLAGS})
+#message(${CMAKE_CXX_FLAGS})
 ExternalProject_Add(libp2p
   PREFIX libp2p
   SOURCE_DIR "${THIRDPARTY_DIR}/libp2p"
@@ -142,11 +139,10 @@ ExternalProject_Add(libp2p
         -DGSL_DIR:PATH=${CMAKE_CURRENT_BINARY_DIR}/GSL
         -DGSL_INCLUDE_DIR:PATH=${_FINDPACKAGE_GSL_INCLUDE_DIR}
         -DCMAKE_FIND_USE_PACKAGE_ROOT_PATH:BOOL=ON
-        -DCLANG_TIDY:BOOL=ON
+        -DCLANG_TIDY:BOOL=OFF
         -DCMAKE_CXX_FLAGS:STRING=-I\ ${_FINDPACKAGE_GSL_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}\ -I\ ${_FINDPACKAGE_SPDLOG_INCLUDE_DIR}\ -I\ \\\"${OPENSSL_INCLUDE_DIR}\\\"\ -I\ ${_FINDPACKAGE_PROTOBUF_INCLUDE_DIR}
   DEPENDS protobuf spdlog tsl_hat_trie Boost.DI
 )
-
 
 set(libp2p_DIR "${CMAKE_CURRENT_BINARY_DIR}/libp2p/lib/cmake/libp2p")
 
