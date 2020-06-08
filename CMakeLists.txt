@@ -100,10 +100,12 @@ ExternalProject_Add(Boost.DI
 set(_FINDPACKAGE_BOOST_DI_CONFIG_DIR "${CMAKE_CURRENT_BINARY_DIR}/Boost.DI/lib/cmake/Boost.DI")
 
 # BOOST library 
-set(Boost_USE_STATIC_LIBS OFF) 
+#set(Boost_USE_STATIC_LIBS ON)   #This parameter is at config file for each platform 
 set(Boost_USE_MULTITHREADED ON)  
 set(Boost_USE_STATIC_RUNTIME OFF) 
-find_package(Boost REQUIRED COMPONENTS date_time filesystem random) # header only libraries must not be added here
+if(!Boost_USE_STATIC_LIBS)
+  find_package(Boost REQUIRED COMPONENTS date_time filesystem random) # header only libraries must not be added here
+endif()
 
 #OpenSSL library
 set(CMAKE_USE_OPENSSL ON)
@@ -162,13 +164,13 @@ set(libp2p_DIR "${CMAKE_CURRENT_BINARY_DIR}/libp2p/lib/cmake/libp2p")
 #find_package(tsl_hat_trie CONFIG REQUIRED)
 
 
-include_directories(${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/include)
+#include_directories(${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/include)
 
 #message(${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/include)
-add_executable(ipfs-pubsub  "${CMAKE_SOURCE_DIR}/src/test/test.cpp")
+#add_executable(ipfs-pubsub  "${CMAKE_SOURCE_DIR}/src/test/test.cpp")
 #add_executable(ipfs-pubsub  "${CMAKE_SOURCE_DIR}/src/test/test.cpp")
 
 #message("${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/Release/ipfs-http-client")
-target_link_libraries(ipfs-pubsub "${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/Release/ipfs-http-client")
+#target_link_libraries(ipfs-pubsub "${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/Release/ipfs-http-client")
 
 #target_link_libraries(ipfs-pubsub "${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/Release/ipfs-http-client")
