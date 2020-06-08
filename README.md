@@ -5,7 +5,16 @@ Please clone :
 git clone --recurse-submodules ssh://git@gitlab.geniusventures.io:8487/GeniusVentures/ipfs-pubsub.git
 
 # Build on Windows
+## Dependency 
+    - openssl
+    - boost (tested on version 1.72.0)
+    - protobuf 
+## Build
+    cmake ../.. -G "Visual Studio 15 2017 Win64"    -DBUILD_TESTING=OFF -DCMAKE_USE_OPENSSL=ON     -DBOOST_ROOT="C:/local/boost_1_72_0"  \
+        -DBOOST_INCLUDE_DIR="C:/local/boost_1_72_0"     -DBOOST_LIBRARY_DIR="C:/local/boost_1_72_0/lib64-msvc-14.1"     -DOPENSSL_ROOT_DIR="C:/Program Files/OpenSSL-Win64"
+    cmake --build . --config Release
 # Build on Linux
+    
 ## Dependency 
     - openssl
     - boost (tested on version 1.72.0)
@@ -13,8 +22,8 @@ git clone --recurse-submodules ssh://git@gitlab.geniusventures.io:8487/GeniusVen
 ## Build
     mkdir build & cd build
     mkdir Linux & cd Linux
-    cmake ../.. -DOPENSSL_INCLUDE_DIR=/path_to/openssl
-    cmake --build . --config Release
+    cmake ../.. -DOPENSSL_INCLUDE_DIR=/path_openssl_to/openssl  -DBOOST_INCLUDE_DIR=/path_boost_to/boost
+    make
 # Build for Android
 ## Dependency 
     - openssl
