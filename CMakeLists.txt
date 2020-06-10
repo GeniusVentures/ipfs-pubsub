@@ -12,6 +12,16 @@ project(ipfs-pubsub C CXX)
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
 
+include(CheckCXXCompilerFlag)
+if (MSVC_VERSION GREATER_EQUAL "1900")
+    include(CheckCXXCompilerFlag)
+    CHECK_CXX_COMPILER_FLAG("/std:c++latest" _cpp_latest_flag_supported)
+    if (_cpp_latest_flag_supported)
+        add_compile_options("/std:c++latest")
+    endif()
+endif()
+
+
 include(cmake/functions.cmake)
 include(ExternalProject)
 include(cmake/config.${CMAKE_SYSTEM_NAME}.cmake)
@@ -167,13 +177,17 @@ find_package(spdlog CONFIG REQUIRED)
 set(tsl_hat_trie_DIR "${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}")
 find_package(tsl_hat_trie CONFIG REQUIRED)
 
-#include_directories(${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/include)
-#include_directories(${CMAKE_CURRENT_BINARY_DIR}/libp2p/include)
-#include_directories(${BOOST_INCLUDE_DIR})
-#include_directories(${_FINDPACKAGE_GSL_INCLUDE_DIR})
-#include_directories(${_FINDPACKAGE_SPDLOG_CONFIG_DIR})
-add_library(pubsubroom src/pubsubroom.cpp)
-target_link_libraries(pubsubroom Boost:boost libp2p::libp2p)
+include_directories(${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/include)
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/libp2p/include)
+include_directories(${BOOST_INCLUDE_DIR})
+include_directories(${_FINDPACKAGE_GSL_INCLUDE_DIR})
+include_directories(${_FINDPACKAGE_SPDLOG_CONFIG_DIR})
+add_library(pubsubroom 
+    src/pubsubroom.cpp
+    )
+target_link_libraries(pubsubroom 
+    p2p_gossip
+    )
 #message(${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/include)
 #add_executable(ipfs-pubsub  "${CMAKE_SOURCE_DIR}/src/test/test.cpp")
 

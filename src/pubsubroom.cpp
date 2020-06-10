@@ -8,7 +8,7 @@
 
 #include "pubsubroom.hpp"
 //#include <spdlog/fmt/fmt.h>
-
+#include <libp2p/protocol/gossip/gossip.hpp>
 #define VERBOSE 0
 using namespace std;
 namespace g = libp2p::protocol::gossip;
