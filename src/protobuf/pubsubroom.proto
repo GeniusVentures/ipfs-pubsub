@@ -1,0 +1,11 @@
+syntax = "proto2";
+
+package pubsub.room.pb;
+
+message RoomInfo {
+	required string topicName =1;
+	repeated string joinedPeerID=2;	
+}
+message PeerInfo {
+	required string id= 1;
+}

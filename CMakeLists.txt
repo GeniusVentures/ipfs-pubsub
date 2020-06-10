@@ -9,6 +9,9 @@ cmake_minimum_required(VERSION 3.10)
 
 project(ipfs-pubsub C CXX)
 
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
+
 include(cmake/functions.cmake)
 include(ExternalProject)
 include(cmake/config.${CMAKE_SYSTEM_NAME}.cmake)
@@ -103,7 +106,7 @@ set(_FINDPACKAGE_BOOST_DI_CONFIG_DIR "${CMAKE_CURRENT_BINARY_DIR}/Boost.DI/lib/c
 #set(Boost_USE_STATIC_LIBS ON)   #This parameter is at config file for each platform 
 set(Boost_USE_MULTITHREADED ON)  
 set(Boost_USE_STATIC_RUNTIME OFF) 
-if(!Boost_USE_STATIC_LIBS)
+if(NOT Boost_USE_STATIC_LIBS)
   find_package(Boost REQUIRED COMPONENTS date_time filesystem random) # header only libraries must not be added here
 endif()
 
@@ -121,7 +124,7 @@ endif()
 #message(${CMAKE_CXX_FLAGS})
 ExternalProject_Add(libp2p
   PREFIX libp2p
-  SOURCE_DIR "${THIRDPARTY_DIR}/libp2p"
+  SOURCE_DIR "${THIRDPARTY_DIR}/libp2p"  
   CMAKE_CACHE_ARGS
         ${_CMAKE_ARGS_OPENSSL_ROOT_DIR}
         -DCMAKE_USE_OPENSSL:BOOL=ON
@@ -143,7 +146,7 @@ ExternalProject_Add(libp2p
         -Dtsl_hat_trie_DIR:PATH=${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}
         -DGSL_ROOT:PATH=${CMAKE_CURRENT_BINARY_DIR}/GSL
         -DGSL_DIR:PATH=${CMAKE_CURRENT_BINARY_DIR}/GSL
-        -DGSL_INCLUDE_DIR:PATH=${_FINDPACKAGE_GSL_INCLUDE_DIR}
+        -DGSL_INCLUDE_DIR:PATH=${_FINDPACKAGE_GSL_INCLUDE_DIR}    
         -DCMAKE_FIND_USE_PACKAGE_ROOT_PATH:BOOL=ON
         -DCLANG_TIDY:BOOL=OFF    
         -DCMAKE_CXX_FLAGS:STRING=-I\ ${BOOST_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_GSL_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}\ -I\ ${_FINDPACKAGE_SPDLOG_INCLUDE_DIR}\ -I\ \\\"${OPENSSL_INCLUDE_DIR}\\\"\ -I\ ${_FINDPACKAGE_PROTOBUF_INCLUDE_DIR}\ ${CXX_FLAGS_FOR_P2P} 
@@ -151,26 +154,31 @@ ExternalProject_Add(libp2p
   DEPENDS protobuf spdlog tsl_hat_trie Boost.DI 
 )
 
-
 set(libp2p_DIR "${CMAKE_CURRENT_BINARY_DIR}/libp2p/lib/cmake/libp2p")
+set(Protobuf_DIR "${CMAKE_CURRENT_BINARY_DIR}/protobuf/cmake")
 
-# Find packages for common
-#message("libp2p_DIR=" ${libp2p_DIR})
-#find_package(libp2p CONFIG REQUIRED)
+find_package(Protobuf CONFIG REQUIRED )
+find_package(libp2p CONFIG REQUIRED)
 
-#set(spdlog_DIR "${_FINDPACKAGE_SPDLOG_CONFIG_DIR}")
-#find_package(spdlog CONFIG REQUIRED)
-#set(tsl_hat_trie_DIR "${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}")
-#find_package(tsl_hat_trie CONFIG REQUIRED)
+#add_subdirectory(src/protobuf)
 
+set(spdlog_DIR "${_FINDPACKAGE_SPDLOG_CONFIG_DIR}")
+find_package(spdlog CONFIG REQUIRED)
+set(tsl_hat_trie_DIR "${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}")
+find_package(tsl_hat_trie CONFIG REQUIRED)
 
-#include_directories(${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/include)
-
+include_directories(${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/include)
+#include_directories(${CMAKE_CURRENT_BINARY_DIR}/libp2p/include)
+#include_directories(${BOOST_INCLUDE_DIR})
+#include_directories(${_FINDPACKAGE_GSL_INCLUDE_DIR})
+#include_directories(${_FINDPACKAGE_SPDLOG_CONFIG_DIR})
+add_library(pubsubroom src/pubsubroom.cpp)
+target_link_libraries(pubsubroom)
 #message(${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/include)
 #add_executable(ipfs-pubsub  "${CMAKE_SOURCE_DIR}/src/test/test.cpp")
-#add_executable(ipfs-pubsub  "${CMAKE_SOURCE_DIR}/src/test/test.cpp")
+
 
 #message("${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/Release/ipfs-http-client")
-#target_link_libraries(ipfs-pubsub "${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/Release/ipfs-http-client")
+#target_link_libraries(ipfs-pubsub "${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/Release/ipfs-http-client" pubsubroom)
 
 #target_link_libraries(ipfs-pubsub "${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/Release/ipfs-http-client")

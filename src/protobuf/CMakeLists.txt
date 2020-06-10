@@ -1,0 +1,1 @@
+add_proto_library(pubsub_proto pubsubroom.proto)
