@@ -47,7 +47,6 @@ mark_as_advanced(JSON_FOR_MODERN_CXX_INCLUDE_DIR)
 set(PROTOBUF_ROOT_DIR "${THIRDPARTY_DIR}/grpc/third_party/protobuf")
 set(PROTOBUF_SRC_DIR "${PROTOBUF_ROOT_DIR}/cmake")
 
-
 # Builds GTest project from the git submodule.
 ExternalProject_Add(GTest
   PREFIX GTest

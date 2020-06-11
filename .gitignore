@@ -3,6 +3,7 @@
 *.pb.h
 .build/
 build/
+temp/
 .vscode/
 .vs/
 
