@@ -7,19 +7,26 @@
 
 cmake_minimum_required(VERSION 3.10)
 
+set(
+    CMAKE_TOOLCHAIN_FILE
+    "${CMAKE_SOURCE_DIR}/cmake/toolchain/cxx17.cmake"
+    CACHE
+    FILEPATH
+    "Default toolchain"
+)
+# Project
 project(ipfs-pubsub C CXX)
+
+if (NOT EXISTS "${CMAKE_TOOLCHAIN_FILE}")
+  # https://cgold.readthedocs.io/en/latest/tutorials/toolchain/globals/cxx-standard.html#summary
+  set(CMAKE_CXX_STANDARD 17)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+  set(CMAKE_CXX_EXTENSIONS OFF)
+  set(CMAKE_POSITION_INDEPENDENT_CODE TRUE)
+endif ()
 
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
-
-include(CheckCXXCompilerFlag)
-if (MSVC_VERSION GREATER_EQUAL "1900")
-    include(CheckCXXCompilerFlag)
-    CHECK_CXX_COMPILER_FLAG("/std:c++latest" _cpp_latest_flag_supported)
-    if (_cpp_latest_flag_supported)
-        add_compile_options("/std:c++latest")
-    endif()
-endif()
 
 
 include(cmake/functions.cmake)
@@ -39,6 +46,34 @@ mark_as_advanced(JSON_FOR_MODERN_CXX_INCLUDE_DIR)
 
 set(PROTOBUF_ROOT_DIR "${THIRDPARTY_DIR}/grpc/third_party/protobuf")
 set(PROTOBUF_SRC_DIR "${PROTOBUF_ROOT_DIR}/cmake")
+
+
+# Builds GTest project from the git submodule.
+ExternalProject_Add(GTest
+  PREFIX GTest
+  SOURCE_DIR "${THIRDPARTY_DIR}/GTest"  
+  CMAKE_CACHE_ARGS                
+        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/GTest
+)
+
+ExternalProject_Add(GMock
+  PREFIX GMock
+  SOURCE_DIR "${THIRDPARTY_DIR}/GTest/googlemock"
+  CMAKE_CACHE_ARGS
+        -DBUILD_GMOCK:BOOL=ON
+        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/GMock
+)
+set(GTest_DIR "${CMAKE_CURRENT_BINARY_DIR}/GTest/lib/cmake/GTest")
+# set(GMock_DIR "${CMAKE_CURRENT_BINARY_DIR}/GTest/lib/cmake/GTest")
+
+#find_package(GTest CONFIG REQUIRED)
+#set_target_properties(GTest PROPERTIES FOLDER extern)
+
+
+
+
+
+#find_package(GMock CONFIG REQUIRED)
 
 # Build protobuf project from the git submodule.
 ExternalProject_Add(protobuf
@@ -143,8 +178,7 @@ ExternalProject_Add(libp2p
         -DBUILD_EXAMPLES:BOOL=OFF
         -DBUILD_TESTING:BOOL=OFF
         -DEXPOSE_MOCKS:BOOL=ON
-        -DHUNTER_ENABLED:BOOL=OFF
-        -DBUILD_EXAMPLES:BOOL=OFF
+        -DHUNTER_ENABLED:BOOL=OFF        
         -DProtobuf_DIR:PATH=${_FINDPACKAGE_PROTOBUF_CONFIG_DIR}
         -DProtobuf_INCLUDE_DIR:PATH=${_FINDPACKAGE_PROTOBUF_INCLUDE_DIR}
         -DProtobuf_LIBRARIES:PATH=${_FINDPACKAGE_PROTOBUF_LIB_DIR}
@@ -159,31 +193,39 @@ ExternalProject_Add(libp2p
         -DGSL_INCLUDE_DIR:PATH=${_FINDPACKAGE_GSL_INCLUDE_DIR}    
         -DCMAKE_FIND_USE_PACKAGE_ROOT_PATH:BOOL=ON
         -DCLANG_TIDY:BOOL=OFF    
+        -DGTest_DIR:PATH=${GTest_DIR}
+        -DGMock_DIR:PATH=${GTest_DIR}
         -DCMAKE_CXX_FLAGS:STRING=-I\ ${BOOST_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_GSL_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}\ -I\ ${_FINDPACKAGE_SPDLOG_INCLUDE_DIR}\ -I\ \\\"${OPENSSL_INCLUDE_DIR}\\\"\ -I\ ${_FINDPACKAGE_PROTOBUF_INCLUDE_DIR}\ ${CXX_FLAGS_FOR_P2P} 
 
   DEPENDS protobuf spdlog tsl_hat_trie Boost.DI 
 )
 
-set(libp2p_DIR "${CMAKE_CURRENT_BINARY_DIR}/libp2p/lib/cmake/libp2p")
-set(Protobuf_DIR "${CMAKE_CURRENT_BINARY_DIR}/protobuf/cmake")
 
-find_package(Protobuf CONFIG REQUIRED )
-find_package(libp2p CONFIG REQUIRED)
+set(Protobuf_DIR "${CMAKE_CURRENT_BINARY_DIR}/protobuf/cmake")
+set(spdlog_DIR "${_FINDPACKAGE_SPDLOG_CONFIG_DIR}")
+set(tsl_hat_trie_DIR "${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}")
+set(libp2p_DIR "${CMAKE_CURRENT_BINARY_DIR}/libp2p/lib/cmake/libp2p")
+
+# find_package(Protobuf CONFIG REQUIRED )
+# find_package(spdlog CONFIG REQUIRED)
+# find_package(tsl_hat_trie CONFIG REQUIRED)
+# find_package(libp2p CONFIG REQUIRED)
 
 #add_subdirectory(src/protobuf)
 
-set(spdlog_DIR "${_FINDPACKAGE_SPDLOG_CONFIG_DIR}")
-find_package(spdlog CONFIG REQUIRED)
-set(tsl_hat_trie_DIR "${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}")
-find_package(tsl_hat_trie CONFIG REQUIRED)
+option(TESTING "Build tests" ON)
 
+include_directories(${OPENSSL_INCLUDE_DIR})
 include_directories(${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/include)
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/libp2p/include)
 include_directories(${BOOST_INCLUDE_DIR})
 include_directories(${_FINDPACKAGE_GSL_INCLUDE_DIR})
-include_directories(${_FINDPACKAGE_SPDLOG_CONFIG_DIR})
+include_directories(${_FINDPACKAGE_SPDLOG_INCLUDE_DIR})
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/Boost.DI/include)
+
 add_library(pubsubroom 
     src/pubsubroom.cpp
+    src/utility.cpp
     )
 target_link_libraries(pubsubroom 
     p2p_gossip

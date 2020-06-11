@@ -14,6 +14,12 @@
 #include <memory>
 #include <vector>
 #include <array>
+#include <iostream>
+
+#include <spdlog/fmt/fmt.h>
+#include <boost/program_options.hpp>
+#include <libp2p/injector/gossip_injector.hpp>
+#include "utility.hpp"
 
 using namespace std;
 
@@ -26,7 +32,7 @@ using namespace std;
 
 //namespace g = libp2p::protocol::gossip;
 
-namespace PubsubRoom
+namespace pubsubroom
 {
     class  PubsubRoom
     {
