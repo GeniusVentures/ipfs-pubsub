@@ -18,19 +18,19 @@
 
 #include <spdlog/fmt/fmt.h>
 #include <boost/program_options.hpp>
-#include <libp2p/injector/gossip_injector.hpp>
+#include <libp2p/protocol/gossip/impl/local_subscriptions.hpp>
 #include "utility.hpp"
 
 using namespace std;
 
-///#include <libp2p/protocol/gossip/gossip.hpp>
+#include <libp2p/protocol/gossip/gossip.hpp>
 
 
 /// \max number that can be connected in one room
 #define MAX_PEER_COUNT 1024
 
 
-//namespace g = libp2p::protocol::gossip;
+namespace g = libp2p::protocol::gossip;
 
 namespace pubsubroom
 {
@@ -42,14 +42,16 @@ namespace pubsubroom
         /// \variable for room id. each room has unique roomId and topic name
         int_least64_t roomId;
         /// \varialbe for room topic variable in libp2p
-        //g::TopicId  topicId;
+        g::TopicId  topicId;
         /// \variable save info for peers in room.
         std::array<std::string, MAX_PEER_COUNT> m_peers={};
+        g::Config config;    
+        std::int_least16_t peerPortNum = 5001;
         /* data */
     public:
         /// \construncter and destrunctor for pubsubroom
-        PubsubRoom();
-        PubsubRoom(std::string topicName);
+        // PubsubRoom( bool bLocalNode=true );
+        PubsubRoom( std::string topicName, std::int_least16_t nodePeerPort=0 );
         ~ PubsubRoom();
         /// \interfaces 
         std::array<std::string, MAX_PEER_COUNT> getPeers();

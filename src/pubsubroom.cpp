@@ -8,6 +8,7 @@
 
 #include "pubsubroom.hpp"
 //#include <spdlog/fmt/fmt.h>
+#include <libp2p/protocol/gossip/impl/local_subscriptions.hpp>
 #include <libp2p/protocol/gossip/gossip.hpp>
 #include <libp2p/injector/gossip_injector.hpp>
 
@@ -19,14 +20,11 @@ namespace pubsubroom
 {  
        
     /// \param overriding default config to see local messages as well (echo mode)
-    libp2p::protocol::gossip::Config config;
     
-    std::int_least16_t peerPortNum = 5001;
-
-    PubsubRoom:: PubsubRoom( void )
-    {
-        this.config.echo_forward_mode = true;
-    }
+    // PubsubRoom:: PubsubRoom( bool bLocalNode=true )
+    // {
+    //     this->config.echo_forward_mode = true;
+    // }
 
     /// \param @node_peer_port: port number for peer 
     /// \param @topicName
@@ -34,7 +32,7 @@ namespace pubsubroom
         
         if(nodePeerPort>0) peerPortNum = nodePeerPort;
 
-        this.config.echo_forward_mode = true;
+        config.echo_forward_mode = true;
 
         /// injector creates and ties dependent objects
         auto injector = libp2p::injector::makeGossipInjector( libp2p::injector::useGossipConfig(config) );

@@ -4,7 +4,6 @@
 #   author : Ruymaster
 ###
 
-
 cmake_minimum_required(VERSION 3.10)
 
 set(
@@ -55,21 +54,18 @@ ExternalProject_Add(GTest
         -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/GTest
 )
 
-ExternalProject_Add(GMock
-  PREFIX GMock
-  SOURCE_DIR "${THIRDPARTY_DIR}/GTest/googlemock"
-  CMAKE_CACHE_ARGS
-        -DBUILD_GMOCK:BOOL=ON
-        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/GMock
-)
+# ExternalProject_Add(GMock
+#   PREFIX GMock
+#   SOURCE_DIR "${THIRDPARTY_DIR}/GTest/googlemock"
+#   CMAKE_CACHE_ARGS
+#         -DBUILD_GMOCK:BOOL=ON
+#         -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/GMock
+# )
 set(GTest_DIR "${CMAKE_CURRENT_BINARY_DIR}/GTest/lib/cmake/GTest")
 # set(GMock_DIR "${CMAKE_CURRENT_BINARY_DIR}/GTest/lib/cmake/GTest")
 
 #find_package(GTest CONFIG REQUIRED)
 #set_target_properties(GTest PROPERTIES FOLDER extern)
-
-
-
 
 
 #find_package(GMock CONFIG REQUIRED)
@@ -151,7 +147,7 @@ set(_FINDPACKAGE_BOOST_DI_CONFIG_DIR "${CMAKE_CURRENT_BINARY_DIR}/Boost.DI/lib/c
 set(Boost_USE_MULTITHREADED ON)  
 set(Boost_USE_STATIC_RUNTIME OFF) 
 if(NOT Boost_USE_STATIC_LIBS)
-  find_package(Boost REQUIRED COMPONENTS date_time filesystem random) # header only libraries must not be added here
+  find_package(Boost REQUIRED COMPONENTS date_time filesystem random program_options) # header only libraries must not be added here
 endif()
 
 #OpenSSL library
@@ -191,7 +187,7 @@ ExternalProject_Add(libp2p
         -DGSL_DIR:PATH=${CMAKE_CURRENT_BINARY_DIR}/GSL
         -DGSL_INCLUDE_DIR:PATH=${_FINDPACKAGE_GSL_INCLUDE_DIR}    
         -DCMAKE_FIND_USE_PACKAGE_ROOT_PATH:BOOL=ON
-        -DCLANG_TIDY:BOOL=OFF    
+        -DCLANG_TIDY:BOOL=OFF
         -DGTest_DIR:PATH=${GTest_DIR}
         -DGMock_DIR:PATH=${GTest_DIR}
         -DCMAKE_CXX_FLAGS:STRING=-I\ ${BOOST_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_GSL_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}\ -I\ ${_FINDPACKAGE_SPDLOG_INCLUDE_DIR}\ -I\ \\\"${OPENSSL_INCLUDE_DIR}\\\"\ -I\ ${_FINDPACKAGE_PROTOBUF_INCLUDE_DIR}\ ${CXX_FLAGS_FOR_P2P} 
@@ -205,12 +201,15 @@ set(spdlog_DIR "${_FINDPACKAGE_SPDLOG_CONFIG_DIR}")
 set(tsl_hat_trie_DIR "${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}")
 set(libp2p_DIR "${CMAKE_CURRENT_BINARY_DIR}/libp2p/lib/cmake/libp2p")
 
-# find_package(Protobuf CONFIG REQUIRED )
-# find_package(spdlog CONFIG REQUIRED)
-# find_package(tsl_hat_trie CONFIG REQUIRED)
-# find_package(libp2p CONFIG REQUIRED)
+message("${spdlog_DIR}")
 
-#add_subdirectory(src/protobuf)
+# find_package(Boost CONFIG REQUIRED)
+find_package(Protobuf CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
+find_package(tsl_hat_trie CONFIG REQUIRED)
+#find_package(libp2p CONFIG REQUIRED)
+
+# add_subdirectory(src/protobuf)
 
 option(TESTING "Build tests" ON)
 
@@ -218,16 +217,30 @@ include_directories(${OPENSSL_INCLUDE_DIR})
 include_directories(${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/include)
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/libp2p/include)
 include_directories(${BOOST_INCLUDE_DIR})
+include_directories(${BOOST_INCLUDE_DIR})
 include_directories(${_FINDPACKAGE_GSL_INCLUDE_DIR})
+include_directories("${CMAKE_CURRENT_BINARY_DIR}/hat-trie/include")
 include_directories(${_FINDPACKAGE_SPDLOG_INCLUDE_DIR})
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/Boost.DI/include)
 
+
 add_library(pubsubroom 
-    src/pubsubroom.cpp
-    src/utility.cpp
+    src/pubsubroom.cpp    
     )
-target_link_libraries(pubsubroom 
+# add_library(pubsubroom 
+# src/pubsubroom.cpp
+# src/utility.cpp
+# )
+target_link_libraries(pubsubroom     
+    p2p_basic_host
+    p2p_default_network
+    p2p_peer_repository
+    p2p_inmem_address_repository
+    p2p_inmem_key_repository
+    p2p_inmem_protocol_repository
     p2p_gossip
+    asio_scheduler
+    Boost::program_options
     )
 #message(${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/include)
 #add_executable(ipfs-pubsub  "${CMAKE_SOURCE_DIR}/src/test/test.cpp")
