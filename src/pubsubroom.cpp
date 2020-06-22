@@ -47,14 +47,17 @@ namespace pubsubroom
         auto host = injector.create<std::shared_ptr<libp2p::Host>>();
          
         /// make peer uri of local node
-        auto local_address_str =  fmt::format("/ip4/{}/tcp/{}/p2p/{}", utility::getLocalIP(*io), peerPortNum, host->getId().toBase58());
-
-
+        auto local_address_str =  fmt::format("/ip4/{}/tcp/{}/p2p/{}", Utility::getLocalIP(*io), peerPortNum, host->getId().toBase58());
     }
     PubsubRoom::~ PubsubRoom()
     {
 
     }
+
+    // PubsubRoom:: PubsubRoom()
+    // {
+
+    // }
     /// \public functions 
     std::array<std::string, MAX_PEER_COUNT>  PubsubRoom:: getPeers()
     {        

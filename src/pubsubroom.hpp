@@ -51,7 +51,7 @@ namespace pubsubroom
     public:
         /// \construncter and destrunctor for pubsubroom
         // PubsubRoom( bool bLocalNode=true );
-        PubsubRoom( std::string topicName, std::int_least16_t nodePeerPort=0 );
+        PubsubRoom( std::string topicName, std::int_least16_t nodePeerPort );
         ~ PubsubRoom();
         /// \interfaces 
         std::array<std::string, MAX_PEER_COUNT> getPeers();
