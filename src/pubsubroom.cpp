@@ -48,10 +48,12 @@ namespace pubsubroom
          
         /// make peer uri of local node
         auto local_address_str =  fmt::format("/ip4/{}/tcp/{}/p2p/{}", Utility::getLocalIP(*io), peerPortNum, host->getId().toBase58());
+
+        
     }
     PubsubRoom::~ PubsubRoom()
     {
-
+        
     }
 
     // PubsubRoom:: PubsubRoom()

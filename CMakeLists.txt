@@ -141,6 +141,7 @@ ExternalProject_Add(Boost.DI
         -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/Boost.DI
 )
 set(_FINDPACKAGE_BOOST_DI_CONFIG_DIR "${CMAKE_CURRENT_BINARY_DIR}/Boost.DI/lib/cmake/Boost.DI")
+set(BOOST_DI_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/Boost.DI/include")
 
 # BOOST library 
 #set(Boost_USE_STATIC_LIBS ON)   #This parameter is at config file for each platform 
@@ -170,7 +171,7 @@ ExternalProject_Add(libp2p
         -DCMAKE_USE_OPENSSL:BOOL=ON
         -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/libp2p
         -DTESTING:BOOL=OFF 
-        -DBUILD_EXAMPLES:BOOL=OFF
+        -DBUILD_EXAMPLES:BOOL=ON
         -DBUILD_TESTING:BOOL=OFF
         -DEXPOSE_MOCKS:BOOL=ON
         -DHUNTER_ENABLED:BOOL=OFF        
@@ -179,7 +180,8 @@ ExternalProject_Add(libp2p
         -DProtobuf_LIBRARIES:PATH=${_FINDPACKAGE_PROTOBUF_LIB_DIR}
         -Dspdlog_DIR:PATH=${_FINDPACKAGE_SPDLOG_CONFIG_DIR}
         -DBoost.DI_DIR:PATH=${_FINDPACKAGE_BOOST_DI_CONFIG_DIR}
-        -DBoost_ROOT:PATH=${BOOST_ROOT}
+        -DBoost_DIR:PATH=${BOOST_ROOT}
+        -DBoost_LIB_DIR_STR:STRING=${BOOST_LIBRARY_DIR}
         -DBoost_INCLUDE_DIR:PATH=${BOOST_INCLUDE_DIR}
         -DBoost_LIBRARY_DIR:PATH=${BOOST_LIBRARY_DIR}
         -Dtsl_hat_trie_DIR:PATH=${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}
@@ -190,33 +192,68 @@ ExternalProject_Add(libp2p
         -DCLANG_TIDY:BOOL=OFF
         -DGTest_DIR:PATH=${GTest_DIR}
         -DGMock_DIR:PATH=${GTest_DIR}
-        -DCMAKE_CXX_FLAGS:STRING=-I\ ${BOOST_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_GSL_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}\ -I\ ${_FINDPACKAGE_SPDLOG_INCLUDE_DIR}\ -I\ \\\"${OPENSSL_INCLUDE_DIR}\\\"\ -I\ ${_FINDPACKAGE_PROTOBUF_INCLUDE_DIR}\ ${CXX_FLAGS_FOR_P2P} 
+        -DCMAKE_CXX_FLAGS:STRING=-I\ ${BOOST_INCLUDE_DIR}\ -I\ ${BOOST_DI_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_GSL_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}\ -I\ ${_FINDPACKAGE_SPDLOG_INCLUDE_DIR}\ -I\ \\\"${OPENSSL_INCLUDE_DIR}\\\"\ -I\ ${_FINDPACKAGE_PROTOBUF_INCLUDE_DIR}\ ${CXX_FLAGS_FOR_P2P} 
 
-  DEPENDS protobuf spdlog tsl_hat_trie Boost.DI 
+  DEPENDS protobuf spdlog tsl_hat_trie Boost.DI
 )
 
 
-set(Protobuf_DIR "${CMAKE_CURRENT_BINARY_DIR}/protobuf/cmake")
-set(spdlog_DIR "${_FINDPACKAGE_SPDLOG_CONFIG_DIR}")
-set(tsl_hat_trie_DIR "${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}")
-set(libp2p_DIR "${CMAKE_CURRENT_BINARY_DIR}/libp2p/lib/cmake/libp2p")
+set(Protobuf_DIR  "${CMAKE_CURRENT_BINARY_DIR}/protobuf/cmake")
+set(spdlog_DIR  "${_FINDPACKAGE_SPDLOG_CONFIG_DIR}")
+set(tsl_hat_trie_DIR   "${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}")
+set(libp2p_DIR   "${CMAKE_CURRENT_BINARY_DIR}/libp2p/lib/cmake/libp2p")
 
-message("${spdlog_DIR}")
-
-# find_package(Boost CONFIG REQUIRED)
+#message("${spdlog_DIR}")
+#set(Boost_DIR "${BOOST_LIBRARY_DIR}/cmake/Boost-1.72.0")
+#message("--boost config-- ${Boost_DIR}")
+#find_package(Boost CONFIG REQUIRED)
+# find_package(Boost 1.72 REQUIRED COMPONENTS
+#              date_time filesystem iostreams)
 find_package(Protobuf CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(tsl_hat_trie CONFIG REQUIRED)
-#find_package(libp2p CONFIG REQUIRED)
+find_package(libp2p CONFIG REQUIRED)
 
 # add_subdirectory(src/protobuf)
 
+
+ExternalProject_Add(gossip_test
+  PREFIX gossip_test
+  SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/gossip_test"  
+  CMAKE_CACHE_ARGS
+        ${_CMAKE_ARGS_OPENSSL_ROOT_DIR}
+        -DCMAKE_USE_OPENSSL:BOOL=ON
+        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/gossip_test
+        #-DTESTING:BOOL=OFF      
+        -DProtobuf_DIR:PATH=${_FINDPACKAGE_PROTOBUF_CONFIG_DIR}
+        -DProtobuf_INCLUDE_DIR:PATH=${_FINDPACKAGE_PROTOBUF_INCLUDE_DIR}
+        -DProtobuf_LIBRARIES:PATH=${_FINDPACKAGE_PROTOBUF_LIB_DIR}
+        -Dspdlog_DIR:PATH=${_FINDPACKAGE_SPDLOG_CONFIG_DIR}
+        -DBoost.DI_DIR:PATH=${_FINDPACKAGE_BOOST_DI_CONFIG_DIR}
+        -DBoost_DIR:PATH=${BOOST_ROOT}
+        -DBoost_LIB_DIR_STR:STRING=${BOOST_LIBRARY_DIR}
+        -DBoost_INCLUDE_DIR:PATH=${BOOST_INCLUDE_DIR}
+        -DBoost_LIBRARY_DIR:PATH=${BOOST_LIBRARY_DIR}
+        -Dtsl_hat_trie_DIR:PATH=${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}
+        -DEXTERNAL_BUILD_DIR:STRING=${CMAKE_CURRENT_BINARY_DIR}
+        -DGSL_ROOT:PATH=${CMAKE_CURRENT_BINARY_DIR}/GSL
+        -DGSL_DIR:PATH=${CMAKE_CURRENT_BINARY_DIR}/GSL
+        -DGSL_INCLUDE_DIR:PATH=${_FINDPACKAGE_GSL_INCLUDE_DIR}    
+        -Dlibp2p_DIR:STRING=${libp2p_DIR}        
+        -Dlibp2p_INCLUDE_DIR:STRING=${CMAKE_CURRENT_BINARY_DIR}/libp2p/include
+        -DCMAKE_FIND_USE_PACKAGE_ROOT_PATH:BOOL=ON
+        -DCLANG_TIDY:BOOL=OFF
+        -DGTest_DIR:PATH=${GTest_DIR}
+        -DGMock_DIR:PATH=${GTest_DIR}
+        -DCMAKE_CXX_FLAGS:STRING=-I\ ${BOOST_INCLUDE_DIR}\ -I\ ${BOOST_DI_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_GSL_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}\ -I\ ${_FINDPACKAGE_SPDLOG_INCLUDE_DIR}\ -I\ \\\"${OPENSSL_INCLUDE_DIR}\\\"\ -I\ ${_FINDPACKAGE_PROTOBUF_INCLUDE_DIR}\ ${CXX_FLAGS_FOR_P2P} 
+
+  DEPENDS protobuf spdlog tsl_hat_trie Boost.DI libp2p
+)
 option(TESTING "Build tests" ON)
 
 include_directories(${OPENSSL_INCLUDE_DIR})
 include_directories(${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/include)
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/libp2p/include)
-include_directories(${BOOST_INCLUDE_DIR})
 include_directories(${BOOST_INCLUDE_DIR})
 include_directories(${_FINDPACKAGE_GSL_INCLUDE_DIR})
 include_directories("${CMAKE_CURRENT_BINARY_DIR}/hat-trie/include")
@@ -231,7 +268,9 @@ add_library(pubsubroom
 # src/pubsubroom.cpp
 # src/utility.cpp
 # )
-target_link_libraries(pubsubroom     
+
+
+target_link_libraries(pubsubroom  PUBLIC 
     p2p_basic_host
     p2p_default_network
     p2p_peer_repository
@@ -239,14 +278,106 @@ target_link_libraries(pubsubroom
     p2p_inmem_key_repository
     p2p_inmem_protocol_repository
     p2p_gossip
-    asio_scheduler
+    asio_scheduler    
     Boost::program_options
     )
-#message(${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/include)
-#add_executable(ipfs-pubsub  "${CMAKE_SOURCE_DIR}/src/test/test.cpp")
 
+
+#link_directories(${CMAKE_CURRENT_BINARY_DIR}/libp2p/lib ${BOOST_LIBRARY_DIR})
+#add_executable(ipfs_pubsub_test  "${CMAKE_SOURCE_DIR}/src/test/test.cpp")
+#set_target_properties(ipfs_pubsub_test PROPERTIES LINK_FLAGS "/FORCE:MULTIPLE")
+#target_link_libraries(ipfs_pubsub_test pubsubroom)
+# target_link_libraries(ipfs_pubsub_test pubsubroom    
+#     p2p_basic_host
+#     p2p_default_network
+#     p2p_peer_repository
+#     p2p_inmem_address_repository
+#     p2p_inmem_key_repository
+#     p2p_inmem_protocol_repository
+#     #---gossip
+#     p2p_gossip
+#     p2p_gossip_proto
+#     #---crypto -
+#     p2p_aes_provider
+#     p2p_crypto_provider
+#     p2p_ecdsa_provider
+#     p2p_ed25519_provider
+#     p2p_hmac_provider
+#     p2p_random_generator
+#     p2p_secp256k1_provider
+#     p2p_key_marshaller
+#     p2p_key_validator
+#     p2p_aes_provider
+#     p2p_rsa_provider
+#     p2p_sha
+#     p2p_crypto_key
+#     p2p_crypto_error
+#     p2p_crypto_common
+#     p2p_keys_proto
+#     #-- multihash --
+#     p2p_multihash
+#     p2p_uvarint
+#     p2p_multiaddress
+#     p2p_cid
+#     p2p_multibase_codec
+#     p2p_converters
+#     p2p_address_repository
+#     p2p_peer_errors
+#     p2p_peer_id
+#     p2p_peer_address
+#     p2p_identity_manager
+#     p2p_peer_repository
+#     p2p_mplex
+#     p2p_mplexed_connection
+#     p2p_yamux    
+#     p2p_yamuxed_connection
+#     p2p_hexutil
+#     p2p_logger
+#     p2p_byteutil    
+#     p2p_literals
+#     p2p_default_network
+#     p2p_router
+#     p2p_dialer
+#     p2p_network
+#     p2p_transport_manager
+#     p2p_connection_manager
+#     p2p_listener_manager
+#     p2p_kad
+#     p2p_multiselect
+#     scheduler
+#     subscription
+#     #--- security ---
+#     p2p_security_error
+#     p2p_secio
+#     p2p_secio_protobuf
+#     p2p_secio_propose_message_marshaller
+#     p2p_secio_exchange_message_marshaller
+#     p2p_plaintext_exchange_message_marshaller
+#     p2p_plaintext
+#     p2p_plaintext_protobuf
+#     # ---transport --
+#     p2p_transport_parser
+#     p2p_upgrader
+#     p2p_upgrader_session
+#     p2p_tcp_listener
+#     p2p_tcp_connection
+#     p2p_tcp
+#     #--- p2p basic ---
+#     p2p_varint_reader
+#     p2p_message_read_writer_error
+#     p2p_message_read_writer
+#     p2p_protobuf_message_read_writer
+#     #--- p2p protocol ----
+
+#     # --- spdlog ----
+#     spdlog::spdlog
+#     protobuf::libprotobuf
+#     protobuf::libprotoc
+
+#     asio_scheduler
+#     Boost::program_options 
+#     OpenSSL::Crypto
+# )
 
 #message("${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/Release/ipfs-http-client")
 #target_link_libraries(ipfs-pubsub "${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/Release/ipfs-http-client" pubsubroom)
-
-#target_link_libraries(ipfs-pubsub "${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/Release/ipfs-http-client")
