@@ -9,6 +9,9 @@ if (TESTING)
 endif()
 
 # find_package(Boost CONFIG REQUIRED  random filesystem program_options)
+set(Boost_USE_STATIC_LIBS ON)
+set(Boost_USE_MULTITHREADED ON)  
+set(Boost_USE_STATIC_RUNTIME ON) 
 find_package(Boost REQUIRED  random filesystem program_options)
 find_package(OpenSSL REQUIRED)
 

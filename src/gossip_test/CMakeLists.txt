@@ -88,6 +88,11 @@ endif ()
 #message("${EXTERNAL_BUILD_DIR}/hat-trie/include")
 
 include_directories(${EXTERNAL_BUILD_DIR}/hat-trie/include)
+include_directories(${EXTERNAL_BUILD_DIR}/GSL/include)
+include_directories(${EXTERNAL_BUILD_DIR}/spdlog/include)
+include_directories(${Boost_INCLUDE_DIR})
+include_directories(${EXTERNAL_BUILD_DIR}/Boost.DI/include)
+
 include_directories(
     SYSTEM
     # project includes    
@@ -97,16 +102,34 @@ include_directories(
 
 link_directories(${Boost_LIB_DIR_STR})
 link_directories(${EXTERNAL_BUILD_DIR}/libp2p/lib)
+
 if(Boost_FOUND)
     message("Boost is found!")
 endif()
 
+add_library(gossip_common
+    utility.cpp
+#    console_async_reader.cpp
+    )
+
+target_link_libraries(gossip_common
+    p2p_basic_host
+    p2p_default_network
+    p2p_peer_repository
+    p2p_inmem_address_repository
+    p2p_inmem_key_repository
+    p2p_inmem_protocol_repository
+    p2p_gossip
+    asio_scheduler
+    Boost::program_options    
+    )
+
 add_executable(gossip_test
-    gossip_chat_example.cpp
+    gossip_chat_test.cpp
     )
 
 set_target_properties(gossip_test PROPERTIES LINK_FLAGS "/FORCE:MULTIPLE")
-target_link_libraries(gossip_test PRIVATE
+target_link_libraries(gossip_test PUBLIC
     gossip_common
     p2p_basic_host
     p2p_default_network
@@ -198,3 +221,4 @@ target_link_libraries(gossip_test PRIVATE
     Boost::program_options 
     OpenSSL::Crypto
     )
+install(TARGETS gossip_test)
