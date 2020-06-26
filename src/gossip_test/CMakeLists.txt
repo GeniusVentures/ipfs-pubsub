@@ -109,7 +109,7 @@ endif()
 
 add_library(gossip_common
     utility.cpp
-#    console_async_reader.cpp
+    console_async_reader.cpp
     )
 
 target_link_libraries(gossip_common

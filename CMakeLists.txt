@@ -240,6 +240,7 @@ ExternalProject_Add(libp2p
   DEPENDS protobuf spdlog tsl_hat_trie Boost.DI 
 )
 set(libp2p_DIR   "${CMAKE_CURRENT_BINARY_DIR}/libp2p/lib/cmake/libp2p")
+
 ExternalProject_Add(gossip_test
   PREFIX gossip_test
   SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/gossip_test"  

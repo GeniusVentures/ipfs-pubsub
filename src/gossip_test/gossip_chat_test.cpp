@@ -10,7 +10,7 @@
 
 #include <libp2p/injector/gossip_injector.hpp>
 
-//#include "console_async_reader.hpp"
+#include "console_async_reader.hpp"
 #include "utility.hpp"
 
 namespace {
@@ -57,10 +57,18 @@ int main(int argc, char *argv[]) {
   // host is our local libp2p node
   auto host = injector.create<std::shared_ptr<libp2p::Host>>();
 
+  auto peerId = host->getId();
+
+  auto hash = peerId.toBase58();
+  std::string localIp = utility::getLocalIP(*io);
   // make peer uri of local node
   auto local_address_str =
-      fmt::format("/ip4/{}/tcp/{}/p2p/{}", utility::getLocalIP(*io),
-                  options->port, host->getId().toBase58());
+      fmt::format("/ip4/{}/tcp/{}/p2p/{}", localIp,
+                  options->port, hash);
+
+  /*auto local_address_str =
+	  fmt::format("/ip4/{}/tcp/{}/p2p/{}", utility::getLocalIP(*io),
+		  options->port, host->getId().toBase58());*/
 
   // local address -> peer info
   auto peer_info = utility::str2peerInfo(local_address_str);
@@ -84,6 +92,7 @@ int main(int argc, char *argv[]) {
         if (!m) {
           // message with no value means EOS, this occurs when the node has
           // stopped
+          std::cerr << "message is not.";
           return;
         }
         std::cerr << utility::formatPeerId(m->from) << ": "
@@ -111,14 +120,13 @@ int main(int argc, char *argv[]) {
     std::cerr << "Node started\n";
   });
 
+  HANDLE handle = CreateFile("CONIN$",    GENERIC_READ,    FILE_SHARE_READ,    NULL,    OPEN_EXISTING,    FILE_FLAG_OVERLAPPED | FILE_FLAG_NO_BUFFERING,   NULL);
+
   // read lines from stdin in async manner and publish them into the chat
-  // utility::ConsoleAsyncReader stdin_reader(
-  //     *io, [&gossip, &options](const std::string &msg) {
-  //       gossip->publish({options->topic}, utility::fromString(msg));
-  //     });
+   utility::ConsoleAsyncReader stdin_reader(  *io, [&gossip, &options](const std::string &msg) {   gossip->publish({options->topic}, utility::fromString(msg)); }, handle);
   //--- simple testing ----//
   const std::string msg ="Testing Message";
-  gossip->publish({options->topic}, utility::fromString(msg));
+  //gossip->publish({options->topic}, utility::fromString(msg));
 
   // gracefully shutdown on signal
   boost::asio::signal_set signals(*io, SIGINT, SIGTERM);
