@@ -61,6 +61,7 @@ int main(int argc, char *argv[]) {
 
   auto hash = peerId.toBase58();
   std::string localIp = utility::getLocalIP(*io);
+  // localIp = "192.168.2.25";
   // make peer uri of local node
   auto local_address_str =
       fmt::format("/ip4/{}/tcp/{}/p2p/{}", localIp,
@@ -78,7 +79,7 @@ int main(int argc, char *argv[]) {
   }
 
   // say local address
-  std::cerr << "I am " << local_address_str << "\n";
+  std::cerr << "My peer address: " << local_address_str << "\n";
 
   // create gossip node
   auto gossip =
@@ -123,9 +124,12 @@ int main(int argc, char *argv[]) {
   HANDLE handle = CreateFile("CONIN$",    GENERIC_READ,    FILE_SHARE_READ,    NULL,    OPEN_EXISTING,    FILE_FLAG_OVERLAPPED | FILE_FLAG_NO_BUFFERING,   NULL);
 
   // read lines from stdin in async manner and publish them into the chat
-   utility::ConsoleAsyncReader stdin_reader(  *io, [&gossip, &options](const std::string &msg) {   gossip->publish({options->topic}, utility::fromString(msg)); }, handle);
+   utility::ConsoleAsyncReader stdin_reader(  *io, [&gossip, &options](const std::string &msg) {
+	   gossip->publish({options->topic}, utility::fromString(msg)); 
+   }, handle);
+
   //--- simple testing ----//
-  const std::string msg ="Testing Message";
+  //const std::string msg ="Testing Message";
   //gossip->publish({options->topic}, utility::fromString(msg));
 
   // gracefully shutdown on signal
