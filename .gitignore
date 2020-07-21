@@ -5,6 +5,7 @@
 build/
 temp/
 Rel/
+rel/
 .vscode/
 .vs/
 

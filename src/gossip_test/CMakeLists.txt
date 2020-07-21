@@ -1,7 +1,4 @@
-#
-# Copyright Soramitsu Co., Ltd. All Rights Reserved.
-# SPDX-License-Identifier: Apache-2.0
-#
+
 cmake_minimum_required(VERSION 3.12)
 
 find_program(CCACHE_FOUND ccache)

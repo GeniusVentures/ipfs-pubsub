@@ -1,11 +1,4 @@
-###
-#   brief  : CMake file for ipfs pubsub project
-#   date   : 05/30/2020
-#   author : Ruymaster
-###
-
-cmake_minimum_required(VERSION 3.10)
-
+cmake_minimum_required(VERSION 3.12)
 set(
     CMAKE_TOOLCHAIN_FILE
     "${CMAKE_SOURCE_DIR}/cmake/toolchain/cxx17.cmake"
@@ -24,306 +17,67 @@ if (NOT EXISTS "${CMAKE_TOOLCHAIN_FILE}")
   set(CMAKE_POSITION_INDEPENDENT_CODE TRUE)
 endif ()
 
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
-set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MT")
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MTd")
-
-if (CMAKE_BUILD_TYPE EQUAL Debug)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MTd")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MTd")
-endif (CMAKE_BUILD_TYPE EQUAL Debug) 
-
-if (CMAKE_BUILD_TYPE EQUAL Release)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MT")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MT")
-endif (CMAKE_BUILD_TYPE EQUAL Release) 
-
-set(CompilerFlags
-        CMAKE_CXX_FLAGS
-        CMAKE_CXX_FLAGS_DEBUG
-        CMAKE_CXX_FLAGS_RELEASE
-        CMAKE_C_FLAGS
-        CMAKE_C_FLAGS_DEBUG
-        CMAKE_C_FLAGS_RELEASE
-        )
-foreach(CompilerFlag ${CompilerFlags})
-  string(REPLACE "/MD" "/MT" ${CompilerFlag} "${${CompilerFlag}}")
-endforeach()
-
-
 include(cmake/functions.cmake)
-include(ExternalProject)
-include(cmake/config.${CMAKE_SYSTEM_NAME}.cmake)
+include(cmake/print.cmake)
+print("C flags: ${CMAKE_C_FLAGS}")
+print("CXX flags: ${CMAKE_CXX_FLAGS}")
+print("C Debug flags: ${CMAKE_C_FLAGS_DEBUG}")
+print("CXX Debug flags: ${CMAKE_CXX_FLAGS_DEBUG}")
+print("C Release flags: ${CMAKE_C_FLAGS_RELEASE}")
+print("CXX Release flags: ${CMAKE_CXX_FLAGS_RELEASE}")
+include(cmake/install.cmake)
+# Package config ######################################################################################
+set (CPACK_PACKAGE_VERSION_MAJOR "21")
+set (CPACK_PACKAGE_VERSION_MINOR "0")
+set (CPACK_PACKAGE_VERSION_PATCH "0")
+set (CPACK_PACKAGE_VERSION_PRE_RELEASE "12")
+set (CPACK_PACKAGE_VENDOR "Genius Ventures")
 
+# Export flag    ######################################################################################
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+include(CheckCXXCompilerFlag)
 
-# Set Third party directory
-set(THIRDPARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/..")
-
-set(JSON_FOR_MODERN_CXX_INCLUDE_DIR "${THIRDPARTY_DIR}/json")
-
-# Find json library
-find_path(JSON_FOR_MODERN_CXX_INCLUDE_DIR NAMES nlohmann/json.hpp)
-include_directories(${JSON_FOR_MODERN_CXX_INCLUDE_DIR})
-mark_as_advanced(JSON_FOR_MODERN_CXX_INCLUDE_DIR)
-
-set(PROTOBUF_ROOT_DIR "${THIRDPARTY_DIR}/grpc/third_party/protobuf")
-set(PROTOBUF_SRC_DIR "${PROTOBUF_ROOT_DIR}/cmake")
-
-# Builds GTest project from the git submodule.
-ExternalProject_Add(GTest
-  PREFIX GTest
-  SOURCE_DIR "${THIRDPARTY_DIR}/GTest"  
-  CMAKE_CACHE_ARGS                
-        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/GTest
-)
-
-# ExternalProject_Add(GMock
-#   PREFIX GMock
-#   SOURCE_DIR "${THIRDPARTY_DIR}/GTest/googlemock"
-#   CMAKE_CACHE_ARGS
-#         -DBUILD_GMOCK:BOOL=ON
-#         -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/GMock
-# )
-set(GTest_DIR "${CMAKE_CURRENT_BINARY_DIR}/GTest/lib/cmake/GTest")
-# set(GMock_DIR "${CMAKE_CURRENT_BINARY_DIR}/GTest/lib/cmake/GTest")
-
-#find_package(GTest CONFIG REQUIRED)
-#set_target_properties(GTest PROPERTIES FOLDER extern)
-
-
-#find_package(GMock CONFIG REQUIRED)
-
-# Build protobuf project from the git submodule.
-ExternalProject_Add(protobuf
-  PREFIX protobuf
-  SOURCE_DIR "${PROTOBUF_SRC_DIR}"
-  CMAKE_CACHE_ARGS
-        -Dprotobuf_BUILD_TESTS:BOOL=OFF
-        -Dprotobuf_WITH_ZLIB:BOOL=OFF
-        -Dprotobuf_MSVC_STATIC_RUNTIME:BOOL=OFF
-        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/protobuf
-        -DCMAKE_CXX_FLAGS:STRING=${CMAKE_CXX_FLAGS}
-        -DCMAKE_C_FLAGS:STRING=${CMAKE_C_FLAGS}
-        -DCMAKE_CXX_FLAGS_RELEASE:STRING=${CMAKE_CXX_FLAGS_RELEASE}
-        -DCMAKE_C_FLAGS_RELEASE:STRING=${CMAKE_C_FLAGS_RELEASE}
-        -DCMAKE_CXX_FLAGS_DEBUG:STRING=${CMAKE_CXX_FLAGS_DEBUG}
-        -DCMAKE_C_FLAGS_DEBUG:STRING=${CMAKE_C_FLAGS_DEBUG}
-        -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
-)
-
-# The location where protobuf-config.cmake will be installed varies by platform
-if (WIN32)
-set(_FINDPACKAGE_PROTOBUF_CONFIG_DIR "${CMAKE_CURRENT_BINARY_DIR}/protobuf/cmake")
-else()
-set(_FINDPACKAGE_PROTOBUF_CONFIG_DIR "${CMAKE_CURRENT_BINARY_DIR}/protobuf/lib/cmake/protobuf")
-endif()
-set(_FINDPACKAGE_PROTOBUF_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/protobuf/include")
-set(_FINDPACKAGE_PROTOBUF_LIB_DIR "${CMAKE_CURRENT_BINARY_DIR}/protobuf/lib")
-
-
-# If OPENSSL_ROOT_DIR is set, propagate that hint path to the external projects with OpenSSL dependency.
-set(_CMAKE_ARGS_OPENSSL_ROOT_DIR "")
-if (OPENSSL_ROOT_DIR)
-  set(_CMAKE_ARGS_OPENSSL_ROOT_DIR "-DOPENSSL_ROOT_DIR:PATH=${OPENSSL_ROOT_DIR}")
-  set(OPENSSL_INCLUDE_DIR, "${OPENSSL_ROOT_DIR}/include")
-endif()
-
-message("${THIRDPARTY_DIR}/GSL")
-# Builds Microsoft.GSL
-ExternalProject_Add(Microsoft.GSL
-  PREFIX Microsoft.GSL
-  SOURCE_DIR "${THIRDPARTY_DIR}/GSL"
-  CMAKE_CACHE_ARGS
-        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/GSL
-        -DGSL_TEST:BOOL=OFF
-)
-set(_FINDPACKAGE_GSL_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/GSL/include")
-
-# Builds spdlog v1.4.2
-ExternalProject_Add(spdlog
-  PREFIX spdlog
-  SOURCE_DIR "${THIRDPARTY_DIR}/spdlog"
-  CMAKE_CACHE_ARGS
-        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/spdlog
-        -DCMAKE_CXX_FLAGS:STRING=${CMAKE_CXX_FLAGS}
-        -DCMAKE_C_FLAGS:STRING=${CMAKE_C_FLAGS}
-        -DCMAKE_CXX_FLAGS_RELEASE:STRING=${CMAKE_CXX_FLAGS_RELEASE}
-        -DCMAKE_C_FLAGS_RELEASE:STRING=${CMAKE_C_FLAGS_RELEASE}
-        -DCMAKE_CXX_FLAGS_DEBUG:STRING=${CMAKE_CXX_FLAGS_DEBUG}
-        -DCMAKE_C_FLAGS_DEBUG:STRING=${CMAKE_C_FLAGS_DEBUG}
-        -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
-)
-set(_FINDPACKAGE_SPDLOG_CONFIG_DIR "${CMAKE_CURRENT_BINARY_DIR}/spdlog/lib/spdlog/cmake")
-set(_FINDPACKAGE_SPDLOG_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/spdlog/include")
-
-# Builds tsl_hat_trie 343e0dac54fc8491065e8a059a02db9a2b1248ab
-ExternalProject_Add(tsl_hat_trie
-  PREFIX tsl_hat_trie
-  SOURCE_DIR "${THIRDPARTY_DIR}/hat-trie"
-  CMAKE_CACHE_ARGS
-        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/hat-trie
-)
-set(_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR "${CMAKE_CURRENT_BINARY_DIR}/hat-trie/lib/cmake/tsl_hat_trie")
-
-#set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH} ${CMAKE_CURRENT_BINARY_DIR}/hat-trie/lib/cmake/tsl_hat_trie")
-#message("${CMAKE_PREFIX_PATH}")
-
-# Builds Boost.DI c5287ee710ad90f5286d0cc2b9e49b72d89267a6
-ExternalProject_Add(Boost.DI
-  PREFIX Boost.DI
-  SOURCE_DIR "${THIRDPARTY_DIR}/Boost.DI"
-  CMAKE_CACHE_ARGS
-        -DBOOST_DI_OPT_BUILD_TESTS:BOOL=OFF
-        -DBOOST_DI_OPT_BUILD_EXAMPLES:BOOL=OFF
-        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/Boost.DI
-)
-set(_FINDPACKAGE_BOOST_DI_CONFIG_DIR "${CMAKE_CURRENT_BINARY_DIR}/Boost.DI/lib/cmake/Boost.DI")
-set(BOOST_DI_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/Boost.DI/include")
+# Boost definition ######################################################################################
+option (SGNS_STACKTRACE_BACKTRACE "Use BOOST_STACKTRACE_USE_BACKTRACE in stacktraces, for POSIX" OFF)
+if (SGNS_STACKTRACE_BACKTRACE)
+	add_definitions(-DSGNS_STACKTRACE_BACKTRACE=1)
+	if (BACKTRACE_INCLUDE)
+		add_definitions(-DBOOST_STACKTRACE_BACKTRACE_INCLUDE_FILE=${BACKTRACE_INCLUDE})
+	endif()
+endif ()
 
 # BOOST library 
-#set(Boost_USE_STATIC_LIBS ON)   #This parameter is at config file for each platform 
+set(Boost_USE_STATIC_LIBS ON) 
 set(Boost_USE_MULTITHREADED ON)  
 set(Boost_USE_STATIC_RUNTIME ON) 
-find_package(Boost REQUIRED COMPONENTS date_time filesystem random program_options) # header only libraries must not be added here
+find_package(Boost REQUIRED COMPONENTS date_time filesystem random regex system thread log log_setup program_options) # header only libraries must not be added here
 
-#OpenSSL library
-set(CMAKE_USE_OPENSSL ON)
-if(CMAKE_USE_OPENSSL)
-  find_package(OpenSSL REQUIRED)
-  set(SSL_ENABLED ON)
-  set(USE_OPENSSL ON)
-endif()
 
-#set(tsl_hat_trie_DIR "${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}")
-#find_package(tsl_hat_trie  REQUIRED)
-# Builds libp2p
-#message(${CMAKE_CXX_FLAGS})
-
-ExternalProject_Add(libp2p
-  PREFIX libp2p
-  SOURCE_DIR "${THIRDPARTY_DIR}/libp2p"  
-  CMAKE_CACHE_ARGS
-        ${_CMAKE_ARGS_OPENSSL_ROOT_DIR}        
-        -DCMAKE_USE_OPENSSL:BOOL=ON
-        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/libp2p
-        -DTESTING:BOOL=OFF 
-        -DBUILD_EXAMPLES:BOOL=ON
-        -DBUILD_TESTING:BOOL=OFF
-        -DEXPOSE_MOCKS:BOOL=ON
-        -DHUNTER_ENABLED:BOOL=OFF        
-        -DProtobuf_DIR:PATH=${_FINDPACKAGE_PROTOBUF_CONFIG_DIR}
-        -DProtobuf_INCLUDE_DIR:PATH=${_FINDPACKAGE_PROTOBUF_INCLUDE_DIR}
-        -DProtobuf_LIBRARIES:PATH=${_FINDPACKAGE_PROTOBUF_LIB_DIR}
-        -Dspdlog_DIR:PATH=${_FINDPACKAGE_SPDLOG_CONFIG_DIR}
-        -DBoost.DI_DIR:PATH=${_FINDPACKAGE_BOOST_DI_CONFIG_DIR}
-        -DBoost_DIR:PATH=${BOOST_ROOT}
-        -DBoost_LIB_DIR_STR:STRING=${BOOST_LIBRARY_DIR}
-        -DBoost_INCLUDE_DIR:PATH=${BOOST_INCLUDE_DIR}
-        -DBoost_LIBRARY_DIR:PATH=${BOOST_LIBRARY_DIR}
-        -Dtsl_hat_trie_DIR:PATH=${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}
-        -DGSL_ROOT:PATH=${CMAKE_CURRENT_BINARY_DIR}/GSL
-        -DGSL_DIR:PATH=${CMAKE_CURRENT_BINARY_DIR}/GSL
-        -DGSL_INCLUDE_DIR:PATH=${_FINDPACKAGE_GSL_INCLUDE_DIR}    
-        -DCMAKE_FIND_USE_PACKAGE_ROOT_PATH:BOOL=ON
-        -DCLANG_TIDY:BOOL=OFF
-        -DGTest_DIR:PATH=${GTest_DIR}
-        -DGMock_DIR:PATH=${GTest_DIR}        
-        -DCMAKE_CXX_FLAGS:STRING=-I\ ${BOOST_INCLUDE_DIR}\ -I\ ${BOOST_DI_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_GSL_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}\ -I\ ${_FINDPACKAGE_SPDLOG_INCLUDE_DIR}\ -I\ \\\"${OPENSSL_INCLUDE_DIR}\\\"\ -I\ ${_FINDPACKAGE_PROTOBUF_INCLUDE_DIR}\ ${CXX_FLAGS_FOR_P2P}         
-        -DCMAKE_C_FLAGS:STRING=${CMAKE_C_FLAGS}
-        -DCMAKE_CXX_FLAGS_RELEASE:STRING=${CMAKE_CXX_FLAGS_RELEASE}
-        -DCMAKE_C_FLAGS_RELEASE:STRING=${CMAKE_C_FLAGS_RELEASE}
-        -DCMAKE_CXX_FLAGS_DEBUG:STRING=${CMAKE_CXX_FLAGS_DEBUG}
-        -DCMAKE_C_FLAGS_DEBUG:STRING=${CMAKE_C_FLAGS_DEBUG}
-        -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
-
-  DEPENDS protobuf spdlog tsl_hat_trie Boost.DI 
-)
-set(libp2p_DIR   "${CMAKE_CURRENT_BINARY_DIR}/libp2p/lib/cmake/libp2p")
-
-ExternalProject_Add(gossip_test
-  PREFIX gossip_test
-  SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/gossip_test"  
-  CMAKE_CACHE_ARGS
-        ${_CMAKE_ARGS_OPENSSL_ROOT_DIR}
-        
-        -DCMAKE_USE_OPENSSL:BOOL=ON
-        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/gossip_test
-        #-DTESTING:BOOL=OFF      
-        -DProtobuf_DIR:PATH=${_FINDPACKAGE_PROTOBUF_CONFIG_DIR}
-        -DProtobuf_INCLUDE_DIR:PATH=${_FINDPACKAGE_PROTOBUF_INCLUDE_DIR}
-        -DProtobuf_LIBRARIES:PATH=${_FINDPACKAGE_PROTOBUF_LIB_DIR}
-        -Dspdlog_DIR:PATH=${_FINDPACKAGE_SPDLOG_CONFIG_DIR}
-        -DBoost.DI_DIR:PATH=${_FINDPACKAGE_BOOST_DI_CONFIG_DIR}
-        -DBoost_DIR:PATH=${BOOST_ROOT}
-        -DBoost_LIB_DIR_STR:STRING=${BOOST_LIBRARY_DIR}
-        -DBoost_INCLUDE_DIR:PATH=${BOOST_INCLUDE_DIR}
-        -DBoost_LIBRARY_DIR:PATH=${BOOST_LIBRARY_DIR}
-        -Dtsl_hat_trie_DIR:PATH=${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}
-        -DEXTERNAL_BUILD_DIR:STRING=${CMAKE_CURRENT_BINARY_DIR}
-        -DGSL_ROOT:PATH=${CMAKE_CURRENT_BINARY_DIR}/GSL
-        -DGSL_DIR:PATH=${CMAKE_CURRENT_BINARY_DIR}/GSL
-        -DGSL_INCLUDE_DIR:PATH=${_FINDPACKAGE_GSL_INCLUDE_DIR}    
-        -Dlibp2p_DIR:STRING=${libp2p_DIR}        
-        -Dlibp2p_INCLUDE_DIR:STRING=${CMAKE_CURRENT_BINARY_DIR}/libp2p/include
-        -DCMAKE_FIND_USE_PACKAGE_ROOT_PATH:BOOL=ON
-        -DCLANG_TIDY:BOOL=OFF
-        -DGTest_DIR:PATH=${GTest_DIR}
-        -DGMock_DIR:PATH=${GTest_DIR}
-        -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
-        -DCMAKE_CXX_FLAGS:STRING=-I\ ${BOOST_INCLUDE_DIR}\ -I\ ${BOOST_DI_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_GSL_INCLUDE_DIR}\ -I\ ${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}\ -I\ ${_FINDPACKAGE_SPDLOG_INCLUDE_DIR}\ -I\ \\\"${OPENSSL_INCLUDE_DIR}\\\"\ -I\ ${_FINDPACKAGE_PROTOBUF_INCLUDE_DIR}\ ${CXX_FLAGS_FOR_P2P} 
-        -DCMAKE_CXX_FLAGS:STRING=${CMAKE_CXX_FLAGS}
-        -DCMAKE_C_FLAGS:STRING=${CMAKE_C_FLAGS}
-        -DCMAKE_CXX_FLAGS_RELEASE:STRING=${CMAKE_CXX_FLAGS_RELEASE}
-        -DCMAKE_C_FLAGS_RELEASE:STRING=${CMAKE_C_FLAGS_RELEASE}
-        -DCMAKE_CXX_FLAGS_DEBUG:STRING=${CMAKE_CXX_FLAGS_DEBUG}
-        -DCMAKE_C_FLAGS_DEBUG:STRING=${CMAKE_C_FLAGS_DEBUG}
-        -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
-
-  DEPENDS protobuf spdlog tsl_hat_trie Boost.DI libp2p
+include_directories(  
+  ${PROJECT_SOURCE_DIR}/src
+  ${CBOR_INCLUDE_DIR}  
+  ${leveldb_INCLUDE_DIR}  
 )
 
+find_package(OpenSSL REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
+find_package(tsl_hat_trie CONFIG REQUIRED)
+find_package(libp2p CONFIG REQUIRED)
+find_package(Protobuf CONFIG REQUIRED)
+find_package(leveldb CONFIG REQUIRED)
+find_package(ipfs-lite-cpp CONFIG REQUIRED)
+
+option(TESTING "Build tests" ON)
+link_directories(
+  ${BOOST_LIBRARY_DIR}
+  ${ipfs-lite-cpp_LIB_DIR}
+)
+
+add_subdirectory(src)
 
 
-# set(Protobuf_DIR  "${CMAKE_CURRENT_BINARY_DIR}/protobuf/cmake")
-# set(spdlog_DIR  "${_FINDPACKAGE_SPDLOG_CONFIG_DIR}")
-# set(tsl_hat_trie_DIR   "${_FINDPACKAGE_TSL_HAT_TRIE_CONFIG_DIR}")
-
-
-
-# option(TESTING "Build tests" ON)
-
-# include_directories(${OPENSSL_INCLUDE_DIR})
-# include_directories(${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/include)
-# include_directories(${CMAKE_CURRENT_BINARY_DIR}/libp2p/include)
-# include_directories(${BOOST_INCLUDE_DIR})
-# include_directories(${_FINDPACKAGE_GSL_INCLUDE_DIR})
-# include_directories("${CMAKE_CURRENT_BINARY_DIR}/hat-trie/include")
-# include_directories(${_FINDPACKAGE_SPDLOG_INCLUDE_DIR})
-# include_directories(${CMAKE_CURRENT_BINARY_DIR}/Boost.DI/include)
-
-
-# add_library(pubsubroom 
-#     src/pubsubroom.cpp    
-#     )
-
-# target_link_libraries(pubsubroom  PUBLIC 
-#     p2p_basic_host
-#     p2p_default_network
-#     p2p_peer_repository
-#     p2p_inmem_address_repository
-#     p2p_inmem_key_repository
-#     p2p_inmem_protocol_repository
-#     p2p_gossip
-#     asio_scheduler    
-#     Boost::program_options
-#     )
-
-
-#link_directories(${CMAKE_CURRENT_BINARY_DIR}/libp2p/lib ${BOOST_LIBRARY_DIR})
-#add_executable(ipfs_pubsub_test  "${CMAKE_SOURCE_DIR}/src/test/test.cpp")
-#set_target_properties(ipfs_pubsub_test PROPERTIES LINK_FLAGS "/FORCE:MULTIPLE")
-#target_link_libraries(ipfs_pubsub_test pubsubroom)
-
-#message("${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/Release/ipfs-http-client")
-#target_link_libraries(ipfs-pubsub "${THIRDPARTY_DIR}/cpp-ipfs-http-client/build/Windows/Release/ipfs-http-client" pubsubroom)
+# if (TESTING)
+#   find_package(GTest CONFIG REQUIRED)
+#   enable_testing()
+#   add_subdirectory(test)
+# endif ()
