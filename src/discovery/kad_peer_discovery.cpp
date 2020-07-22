@@ -1,7 +1,3 @@
-/**
- * Copyright Soramitsu Co., Ltd. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0
- */
 
 #include <chrono>
 #include <memory>
@@ -14,7 +10,7 @@
 
 #include "factory.hpp"
 
-namespace pubsub::discovery {
+namespace libp2p::protocol::kademlia::test {
 
   static const uint16_t kPortBase = 40000;
 
@@ -239,7 +235,7 @@ namespace pubsub::discovery {
   void setupLoggers(bool kad_log_debug) {
     static const char *kPattern = "%L %T.%e %v";
 
-    logger = libp2p::common::createLogger("kad-test");
+    logger = libp2p::common::createLogger("kad-example");
     logger->set_pattern(kPattern);
 
     auto kad_logger = libp2p::common::createLogger("kad");
@@ -253,11 +249,11 @@ namespace pubsub::discovery {
     debug_logger->set_level(spdlog::level::debug);
   }
 
-}  //  namespace libp2p::protocol
+}  //  namespace libp2p::protocol::kademlia::example
 
 int main(int argc, char *argv[]) {
   namespace p = libp2p::protocol;
-  namespace x = pubsub::discovery;
+  namespace x = libp2p::protocol::kademlia::test;
   try {
     size_t hosts_count = 6;
     bool kad_log_debug = false;

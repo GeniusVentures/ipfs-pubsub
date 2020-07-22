@@ -1,4 +1,11 @@
 cmake_minimum_required(VERSION 3.12)
+
+find_program(CCACHE_FOUND ccache)
+if (CCACHE_FOUND)
+  set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
+  set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK ccache)
+endif (CCACHE_FOUND)
+
 set(
     CMAKE_TOOLCHAIN_FILE
     "${CMAKE_SOURCE_DIR}/cmake/toolchain/cxx17.cmake"
@@ -54,9 +61,12 @@ find_package(Boost REQUIRED COMPONENTS date_time filesystem random regex system 
 
 
 include_directories(  
+  SYSTEM
   ${PROJECT_SOURCE_DIR}/src
   ${CBOR_INCLUDE_DIR}  
   ${leveldb_INCLUDE_DIR}  
+  ${libp2p_INCLUDE_DIR}
+  ${libp2p_INCLUDE_DIR}/platform/${CMAKE_SYSTEM_NAME}
 )
 
 find_package(OpenSSL REQUIRED)
@@ -67,10 +77,12 @@ find_package(Protobuf CONFIG REQUIRED)
 find_package(leveldb CONFIG REQUIRED)
 find_package(ipfs-lite-cpp CONFIG REQUIRED)
 
+message("----${libp2p_LIBRARY_DIR}")
 option(TESTING "Build tests" ON)
 link_directories(
   ${BOOST_LIBRARY_DIR}
   ${ipfs-lite-cpp_LIB_DIR}
+  ${libp2p_LIBRARY_DIR}
 )
 
 add_subdirectory(src)

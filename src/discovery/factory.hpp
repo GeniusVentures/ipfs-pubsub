@@ -1,20 +1,24 @@
+/**
+ * Copyright Soramitsu Co., Ltd. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
-#ifndef KAD_FACTORY_HPP
-#define KAD_FACTORY_HPP
+#ifndef LIBP2P_KAD_EXAMPLE_FACTORY_HPP
+#define LIBP2P_KAD_EXAMPLE_FACTORY_HPP
 
 #include <libp2p/crypto/crypto_provider.hpp>
 #include <libp2p/crypto/key_marshaller.hpp>
 #include <libp2p/host/host.hpp>
 #include <libp2p/protocol/kademlia/routing_table.hpp>
 
-namespace pubsub::discovery {
+namespace libp2p::protocol::kademlia::test {
   std::shared_ptr<boost::asio::io_context> createIOContext();
 
   struct PerHostObjects {
     std::shared_ptr<libp2p::Host> host;
     std::shared_ptr<libp2p::protocol::kademlia::RoutingTable> routing_table;
     std::shared_ptr<libp2p::crypto::CryptoProvider> key_gen;
-    std::shared_ptr<libp2p::crypto::marshaller::KeyMarshaller> key_marshaller;
+    std::shared_ptr<crypto::marshaller::KeyMarshaller> key_marshaller;
   };
 
   void createPerHostObjects(PerHostObjects &objects,
@@ -22,6 +26,6 @@ namespace pubsub::discovery {
 
   boost::optional<libp2p::peer::PeerInfo> str2peerInfo(const std::string &str);
 
-}  // namespace 
+}  // namespace libp2p::protocol::kademlia::example
 
-#endif  // FACTORY
+#endif  // LIBP2P_KAD_EXAMPLE_FACTORY_HPP

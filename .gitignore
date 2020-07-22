@@ -6,6 +6,7 @@ build/
 temp/
 Rel/
 rel/
+deb/
 .vscode/
 .vs/
 

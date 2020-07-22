@@ -11,7 +11,7 @@
 #include <libp2p/injector/host_injector.hpp>
 #include <libp2p/protocol/kademlia/impl/routing_table_impl.hpp>
 
-namespace pubsub::discovery {
+namespace libp2p::protocol::kademlia::test {
 
   boost::optional<libp2p::peer::PeerInfo> str2peerInfo(const std::string &str) {
     auto server_ma_res = libp2p::multi::Multiaddress::create(str);
