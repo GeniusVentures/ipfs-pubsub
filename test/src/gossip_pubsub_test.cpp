@@ -1,4 +1,4 @@
-#include "gossip_pubsub.hpp"
+#include "ipfs_pubsub/gossip_pubsub.hpp"
 
 #include <gtest/gtest.h>
 #include <spdlog/sinks/basic_file_sink.h>
