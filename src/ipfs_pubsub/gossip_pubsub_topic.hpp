@@ -6,8 +6,8 @@
 namespace sgns::ipfs_pubsub
 {
 /**
-* Gossip pubsub service.
-* Allows to subscribe to a named channel (topic) using linp2p Gossip pub-sub protocol
+* A wrapper for pubsub topic.
+* Allows to subscribe to a named channel (topic) using GossipPubSub service
 * and publish short messages to the named channels
 */
 class GossipPubSubTopic final
