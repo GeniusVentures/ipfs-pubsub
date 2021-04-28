@@ -1,4 +1,4 @@
-#include "gossip_pubsub.hpp"
+#include "ipfs_pubsub/gossip_pubsub.hpp"
 
 #include <iostream>
 #include <boost/format.hpp>

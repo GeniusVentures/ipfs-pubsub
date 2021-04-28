@@ -1,5 +1,6 @@
 add_library(ipfs-pubsub
     gossip_pubsub.cpp
+    gossip_pubsub_topic.cpp
     )
 
 target_include_directories(ipfs-pubsub PRIVATE ${GSL_INCLUDE_DIR})

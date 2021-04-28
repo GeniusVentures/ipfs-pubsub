@@ -21,7 +21,7 @@ set(Boost_USE_STATIC_RUNTIME ON)
 find_package(Boost REQUIRED COMPONENTS random filesystem)
 
 
-add_subdirectory(src/ipfs_pubsub)
+add_subdirectory(src)
 
 # Tests building
 find_package(GTest CONFIG REQUIRED)
