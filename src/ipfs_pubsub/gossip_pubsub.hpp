@@ -39,7 +39,7 @@ public:
 
     /** Creates a gossip subscription service.
     */
-    GossipPubSub(libp2p::common::Logger logger = libp2p::common::createLogger("GossipPubSub"));
+    GossipPubSub();
     ~GossipPubSub();
 
     /** Subscribes the service to a specified topic.

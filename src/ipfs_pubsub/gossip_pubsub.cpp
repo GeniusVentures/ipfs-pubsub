@@ -119,8 +119,8 @@ auto makeHostedGossipInjector(Ts &&... args)
 
 namespace sgns::ipfs_pubsub
 {
-GossipPubSub::GossipPubSub(libp2p::common::Logger logger)
-    : m_logger(logger)
+GossipPubSub::GossipPubSub()
+    : m_logger(libp2p::common::createLogger("GossipPubSub"))
 {
     // Overriding default config to see local messages as well (echo mode)
     libp2p::protocol::gossip::Config config;

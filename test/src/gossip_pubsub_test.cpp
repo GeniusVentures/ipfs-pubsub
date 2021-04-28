@@ -5,12 +5,34 @@
 
 using GossipPubSub = sgns::ipfs_pubsub::GossipPubSub;
 
+class GossipPubSubTest : public ::testing::Test
+{
+public:
+    virtual void SetUp() override
+    {
+        m_logger = spdlog::get("GossipPubSub");
+        if (!m_logger)
+        {
+            m_logger = spdlog::basic_logger_mt("GossipPubSub", "GossipPubSub.log", true);
+            m_logger->set_pattern("[%Y-%m-%d %H:%M:%S][%l] %v");
+            m_logger->set_level(spdlog::level::debug);
+        }
+    }
+
+    virtual void TearDown() override
+    {
+        m_logger->flush();
+    }
+
+    libp2p::common::Logger m_logger;
+};
+
 /**
  * @given A pubsub service which is subscribed to a single topic
  * @when A message is published to a topic that the service is subscribed to.
  * @then The messages is received by the service.
  */
-TEST(GossipPubSubTest, SendMessageToSingleSubscribedTopic)
+TEST_F(GossipPubSubTest, SendMessageToSingleSubscribedTopic)
 {
     std::vector<std::string> receivedMessages;
     GossipPubSub pubs;
@@ -38,7 +60,7 @@ TEST(GossipPubSubTest, SendMessageToSingleSubscribedTopic)
  * @when A message is published to a topic that the service is not subscribed to.
  * @then No messages received.
  */
-TEST(GossipPubSubTest, SendMessageToUnsubscribedTopic)
+TEST_F(GossipPubSubTest, SendMessageToUnsubscribedTopic)
 {
     std::vector<std::string> receivedMessages;
     GossipPubSub pubs;
@@ -63,7 +85,7 @@ TEST(GossipPubSubTest, SendMessageToUnsubscribedTopic)
  * @when A message is published to a specific topic.
  * @then The message processor linked to the topic is executed to process the received message
  */
-TEST(GossipPubSubTest, MessagesMutiplexing)
+TEST_F(GossipPubSubTest, MessagesMutiplexing)
 {
     std::vector<std::string> receivedMessagesTopic1;
     std::vector<std::string> receivedMessagesTopic2;
@@ -107,7 +129,7 @@ TEST(GossipPubSubTest, MessagesMutiplexing)
  * @when A message is published to a specific topic.
  * @then The message processor linked to the topic is executed to process the received message
  */
-TEST(GossipPubSubTest, MutipleGossipSubObjectsOnDifferentChannels)
+TEST_F(GossipPubSubTest, MutipleGossipSubObjectsOnDifferentChannels)
 {
     std::vector<std::string> receivedMessagesTopic1;
     std::vector<std::string> receivedMessagesTopic2;
@@ -154,7 +176,7 @@ TEST(GossipPubSubTest, MutipleGossipSubObjectsOnDifferentChannels)
  * @when A message is published to a specific topic.
  * @then 2 message processor linked to the topic are xecuted to process the received message
  */
-TEST(GossipPubSubTest, MutipleGossipSubObjectsOnSingleChannel)
+TEST_F(GossipPubSubTest, MutipleGossipSubObjectsOnSingleChannel)
 {
     std::vector<std::string> receivedMessagesPubs1Topic1;
     std::vector<std::string> receivedMessagesPubs2Topic1;
@@ -208,14 +230,11 @@ TEST(GossipPubSubTest, MutipleGossipSubObjectsOnSingleChannel)
  * @when Cancel a subscription before a maesage publishing
  * @then No messages should be received
  */
-TEST(GossipPubSubTest, CancelSubscription)
+TEST_F(GossipPubSubTest, CancelSubscription)
 {
     std::vector<std::string> receivedMessages;
-    auto logger = spdlog::basic_logger_mt("GossipPubSubFile", "GossipPubSub.log");
-    logger->set_pattern("[%Y-%m-%d %H:%M:%S][%l] %v");
-    logger->set_level(spdlog::level::debug);
 
-    GossipPubSub pubs(logger);
+    GossipPubSub pubs;
     pubs.Start(40001, {});
     auto pubsTopic1 = pubs.Subscribe("topic1", [&](boost::optional<const GossipPubSub::Message&> message)
         {
@@ -242,14 +261,11 @@ TEST(GossipPubSubTest, CancelSubscription)
  * @when The service is started twice
  * @then The second start failed
  */
-TEST(GossipPubSubTest, DISABLED_SecondStartFailed)
+TEST_F(GossipPubSubTest, DISABLED_SecondStartFailed)
 {
     std::vector<std::string> receivedMessages;
-    auto logger = spdlog::basic_logger_mt("GossipPubSub", "GossipPubSub.log");
-    logger->set_pattern("[%Y-%m-%d %H:%M:%S][%l] %v");
-    logger->set_level(spdlog::level::debug);
 
-    GossipPubSub pubs(logger);
+    GossipPubSub pubs;
     pubs.Start(40001, {});
     auto futureResult = pubs.Start(40001, {});
 
