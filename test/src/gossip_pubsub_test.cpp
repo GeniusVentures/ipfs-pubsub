@@ -6,7 +6,7 @@
 using GossipPubSub = sgns::ipfs_pubsub::GossipPubSub;
 
 /**
- * @given A pubsub service shich is subscribed to a single topic
+ * @given A pubsub service which is subscribed to a single topic
  * @when A message is published to a topic that the service is subscribed to.
  * @then The messages is received by the service.
  */
@@ -25,7 +25,7 @@ TEST(GossipPubSubTest, SendMessageToSingleSubscribedTopic)
     });
 
     std::string message("topic1_message");
-    pubs.Publish("topic1", message);
+    pubs.Publish("topic1", std::vector<uint8_t>(message.begin(), message.end()));
 
     pubs.Stop();
 
@@ -34,7 +34,7 @@ TEST(GossipPubSubTest, SendMessageToSingleSubscribedTopic)
 }
 
 /**
- * @given A pubsub service shich is subscribed to a single topic
+ * @given A pubsub service which is subscribed to a single topic
  * @when A message is published to a topic that the service is not subscribed to.
  * @then No messages received.
  */
@@ -53,7 +53,7 @@ TEST(GossipPubSubTest, SendMessageToUnsubscribedTopic)
         });
 
     std::string message("topic2_message");
-    pubs.Publish("topic2", message);
+    pubs.Publish("topic2", std::vector<uint8_t>(message.begin(), message.end()));
 
     ASSERT_EQ(receivedMessages.size(), 0);
 }
@@ -88,10 +88,10 @@ TEST(GossipPubSubTest, MessagesMutiplexing)
         });
 
     std::string messageTopic1("topic1_message");
-    pubs.Publish("topic1", messageTopic1);
+    pubs.Publish("topic1", std::vector<uint8_t>(messageTopic1.begin(), messageTopic1.end()));
 
     std::string messageTopic2("topic2_message");
-    pubs.Publish("topic2", messageTopic2);
+    pubs.Publish("topic2", std::vector<uint8_t>(messageTopic2.begin(), messageTopic2.end()));
 
     pubs.Stop();
 
@@ -134,10 +134,10 @@ TEST(GossipPubSubTest, MutipleGossipSubObjectsOnDifferentChannels)
         });
 
     std::string messageTopic1("topic1_message");
-    pubs1.Publish("topic1", messageTopic1);
+    pubs1.Publish("topic1", std::vector<uint8_t>(messageTopic1.begin(), messageTopic1.end()));
 
     std::string messageTopic2("topic2_message");
-    pubs2.Publish("topic2", messageTopic2);
+    pubs2.Publish("topic2", std::vector<uint8_t>(messageTopic2.begin(), messageTopic2.end()));
 
     pubs1.Stop();
     pubs2.Stop();
@@ -188,7 +188,7 @@ TEST(GossipPubSubTest, MutipleGossipSubObjectsOnSingleChannel)
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     std::string messageTopic1("topic1_message");
-    pubs2.Publish("topic1", messageTopic1);
+    pubs2.Publish("topic1", std::vector<uint8_t>(messageTopic1.begin(), messageTopic1.end()));
 
     // Wait for message transmitting
     std::this_thread::sleep_for(std::chrono::seconds(2));
@@ -230,7 +230,7 @@ TEST(GossipPubSubTest, CancelSubscription)
     pubsTopic1.get().cancel();
 
     std::string message("topic1_message");
-    pubs.Publish("topic1", message);
+    pubs.Publish("topic1", std::vector<uint8_t>(message.begin(), message.end()));
 
     pubs.Stop();
 

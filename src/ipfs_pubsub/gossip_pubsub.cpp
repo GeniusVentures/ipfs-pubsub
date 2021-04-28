@@ -36,18 +36,6 @@ std::string ToString(const std::vector<uint8_t>& buf)
     return std::string(reinterpret_cast<const char*>(buf.data()), buf.size());
 }
 
-std::vector<uint8_t> FromString(const std::string& s)
-{
-    std::vector<uint8_t> ret{};
-    auto sz = s.size();
-    if (sz > 0) 
-    {
-        ret.reserve(sz);
-        ret.assign(s.begin(), s.end());
-    }
-    return ret;
-}
-
 std::string GetLocalIP(boost::asio::io_context& io) 
 {
     boost::asio::ip::tcp::resolver resolver(io);
@@ -271,16 +259,16 @@ std::future<GossipPubSub::Subscription> GossipPubSub::Subscribe(const std::strin
     return subscription->get_future();
 }
 
-void GossipPubSub::Publish(const std::string& topic, const std::string& message)
+void GossipPubSub::Publish(const std::string& topic, const std::vector<uint8_t>& message)
 {
     m_strand->post([topic, message, this]()
     {
-        m_gossip->publish({ topic }, FromString(message));
+        m_gossip->publish({ topic }, message);
         if (m_logger->should_log(spdlog::level::debug))
         {
             m_logger->debug(
-                (boost::format("%s: Message '%s' published to topic '%s'")
-                    % m_localAddress % message % topic).str());
+                (boost::format("%s: Message published to topic '%s'")
+                    % m_localAddress % topic).str());
         }
     });
 }

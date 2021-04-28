@@ -34,11 +34,18 @@ public:
     void Unsubscribe();
 
     /** Publish a string message to specific topic.
-    * @param topic - a topic to publish a message to.
     * @param message - published message
     */
     void Publish(const std::string& message);
 
+    /** Publish binary data to specific topic
+    * @param message - published message data
+    */
+    void Publish(const std::vector<uint8_t>& message);
+
+    /** Returns topic id
+    * @return topic id
+    */
     const std::string& GetTopic() const;
 private:
     std::shared_ptr<GossipPubSub> m_gossipPubSub;

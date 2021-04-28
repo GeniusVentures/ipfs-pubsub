@@ -53,7 +53,7 @@ public:
     * @param topic - a topic to publish a message to.
     * @param message - published message
     */
-    void Publish(const std::string& topic, const std::string& message);
+    void Publish(const std::string& topic, const std::vector<uint8_t>& message);
 
     /** Starts the gossip pubsub service.
     * @param listeningPort - is a port for incoming connections.
