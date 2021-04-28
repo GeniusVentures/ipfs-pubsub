@@ -33,13 +33,15 @@ if (TESTING)
 endif ()
 
 # Installation setup
+set(IPFS_PUBSUB_CONFIG_DESTINATION_DIR "lib/cmake/ipfs-pubsub")
+
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/src/" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}" FILES_MATCHING  PATTERN "*.hpp")
 
-install(TARGETS ipfs-pubsub EXPORT ipfs-pubsub_targets DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+install(TARGETS ipfs-pubsub EXPORT ipfs-pubsubTargets DESTINATION "${CMAKE_INSTALL_LIBDIR}")
 
-install(EXPORT ipfs-pubsub_targets
-  FILE ipfs-pubsub_targets.cmake
-  DESTINATION lib/cmake
+install(EXPORT ipfs-pubsubTargets
+  FILE ipfs-pubsubTargets.cmake
+  DESTINATION ${IPFS_PUBSUB_CONFIG_DESTINATION_DIR}
 )
 
 include(CMakePackageConfigHelpers)
@@ -61,6 +63,6 @@ write_basic_package_version_file(
 # install the configuration file
 install(FILES
   ${CMAKE_CURRENT_BINARY_DIR}/ipfs-pubsubConfig.cmake
-  DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake"
+  DESTINATION ${IPFS_PUBSUB_CONFIG_DESTINATION_DIR}
 )
 #[[]]

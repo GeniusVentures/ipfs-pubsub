@@ -3,7 +3,11 @@ add_library(ipfs-pubsub
     gossip_pubsub_topic.cpp
     )
 
-target_include_directories(ipfs-pubsub PRIVATE ${GSL_INCLUDE_DIR})
+target_include_directories(ipfs-pubsub 
+    PRIVATE ${GSL_INCLUDE_DIR}
+    PUBLIC "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
+)
+
 
 
 target_link_libraries(ipfs-pubsub
