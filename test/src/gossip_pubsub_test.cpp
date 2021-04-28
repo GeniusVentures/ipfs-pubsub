@@ -3,6 +3,8 @@
 #include <gtest/gtest.h>
 #include <spdlog/sinks/basic_file_sink.h>
 
+using GossipPubSub = sgns::ipfs_pubsub::GossipPubSub;
+
 /**
  * @given A pubsub service shich is subscribed to a single topic
  * @when A message is published to a topic that the service is subscribed to.

@@ -13,6 +13,8 @@
 #include <libp2p/common/logger.hpp>
 #include <libp2p/outcome/outcome.hpp>
 
+namespace sgns::ipfs_pubsub
+{
 /**
 * Codes for errors that originate in gossip pubsub
 */
@@ -22,8 +24,6 @@ enum class GossipPubSubError
     FAILED_LOCAL_ADDRESS_LISTENING,
     FAILED_SERVICE_START,
 };
-
-OUTCOME_HPP_DECLARE_ERROR_1(GossipPubSubError);
 
 /**
 * Gossip pubsub service.
@@ -97,5 +97,9 @@ inline const std::string& GossipPubSub::GetLocalAddress()
 {
     return m_localAddress;
 }
+
+}
+
+OUTCOME_HPP_DECLARE_ERROR_2(sgns::ipfs_pubsub, GossipPubSubError);
 
 #endif // GRPC_FOR_SUPERGENIUS_GOSSIBSUB

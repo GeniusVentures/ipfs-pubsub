@@ -7,9 +7,9 @@
 
 #include <boost/di/extension/scopes/shared.hpp>
 
-OUTCOME_CPP_DEFINE_CATEGORY_2(GossipPubSubError, e) 
+OUTCOME_CPP_DEFINE_CATEGORY_3(sgns::ipfs_pubsub, GossipPubSubError, e)
 {
-    using E = GossipPubSubError;
+    using E = sgns::ipfs_pubsub::GossipPubSubError;
     switch (e) 
     {
     case E::INVALID_LOCAL_ADDRESS:
@@ -21,6 +21,7 @@ OUTCOME_CPP_DEFINE_CATEGORY_2(GossipPubSubError, e)
     }
     return "Unknown error";
 }
+
 namespace
 {
 std::string FormatPeerId(const std::vector<uint8_t>& bytes) 
@@ -128,6 +129,8 @@ auto makeHostedGossipInjector(Ts &&... args)
 }
 }
 
+namespace sgns::ipfs_pubsub
+{
 GossipPubSub::GossipPubSub(libp2p::common::Logger logger)
     : m_logger(logger)
 {
@@ -282,3 +285,4 @@ void GossipPubSub::Publish(const std::string& topic, const std::string& message)
     });
 }
 
+}
