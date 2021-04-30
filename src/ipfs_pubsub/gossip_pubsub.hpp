@@ -12,6 +12,7 @@
 #include <libp2p/protocol/gossip/gossip.hpp>
 #include <libp2p/common/logger.hpp>
 #include <libp2p/outcome/outcome.hpp>
+#include <optional>
 
 namespace sgns::ipfs_pubsub
 {
@@ -40,6 +41,13 @@ public:
     /** Creates a gossip subscription service.
     */
     GossipPubSub();
+
+    /** Creates a gossip subscription service.
+    * keyPair public / private key pair.
+    * The public key is used as a gossip channel indentifier in a peer multiaddress
+    */
+    GossipPubSub(libp2p::crypto::KeyPair keyPair);
+
     ~GossipPubSub();
 
     /** Subscribes the service to a specified topic.
@@ -78,6 +86,7 @@ public:
     const std::string& GetLocalAddress();
 
 private:
+    void Init(std::optional<libp2p::crypto::KeyPair> keyPair);
 
     std::shared_ptr<boost::asio::io_context> m_context;
     std::unique_ptr<boost::asio::io_context::strand> m_strand;
@@ -85,7 +94,7 @@ private:
     std::shared_ptr<libp2p::protocol::gossip::Gossip> m_gossip;
     std::unique_ptr<std::thread> _serviceThread;
     std::string m_localAddress;
-    libp2p::common::Logger m_logger;
+    libp2p::common::Logger m_logger = libp2p::common::createLogger("GossipPubSub");
 };
 
 inline bool GossipPubSub::IsStarted() const

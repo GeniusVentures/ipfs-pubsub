@@ -3,6 +3,8 @@
 #include <gtest/gtest.h>
 #include <spdlog/sinks/basic_file_sink.h>
 
+#include <libp2p/multi/multibase_codec/multibase_codec_impl.hpp>
+
 using GossipPubSub = sgns::ipfs_pubsub::GossipPubSub;
 
 class GossipPubSubTest : public ::testing::Test
@@ -232,9 +234,17 @@ TEST_F(GossipPubSubTest, MutipleGossipSubObjectsOnSingleChannel)
  */
 TEST_F(GossipPubSubTest, CancelSubscription)
 {
+    std::string publicKey = "z5b3BTS9wEgJxi9E8NHH6DT8Pj9xTmxBRgTaRUpBVox9a";
+    std::string privateKey = "zGRXH26ag4k9jxTGXp2cg8n31CEkR2HN1SbHaKjaHnFTu";
+
+    libp2p::crypto::KeyPair keyPair;
+    auto codec = libp2p::multi::MultibaseCodecImpl();
+    keyPair.publicKey = { libp2p::crypto::PublicKey::Type::Ed25519, codec.decode(publicKey).value() };
+    keyPair.privateKey = { libp2p::crypto::PublicKey::Type::Ed25519, codec.decode(privateKey).value() };
+
     std::vector<std::string> receivedMessages;
 
-    GossipPubSub pubs;
+    GossipPubSub pubs(keyPair);
     pubs.Start(40001, {});
     auto pubsTopic1 = pubs.Subscribe("topic1", [&](boost::optional<const GossipPubSub::Message&> message)
         {

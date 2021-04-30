@@ -81,9 +81,10 @@ boost::optional<libp2p::peer::PeerInfo> PeerInfoFromString(const std::string& st
 }
 
 template <typename... Ts>
-auto makeHostedGossipInjector(Ts &&... args)
+auto makeCustomGossipInjector(std::optional<libp2p::crypto::KeyPair> keyPair, Ts &&... args)
 {
     using namespace libp2p;
+    namespace di = boost::di;
 
     auto csprng = std::make_shared<crypto::random::BoostRandomGenerator>();
     auto ed25519_provider = std::make_shared<crypto::ed25519::Ed25519ProviderImpl>();
@@ -93,34 +94,41 @@ auto makeHostedGossipInjector(Ts &&... args)
     auto hmac_provider = std::make_shared<crypto::hmac::HmacProviderImpl>();
     std::shared_ptr<crypto::CryptoProvider> crypto_provider =
         std::make_shared<crypto::CryptoProviderImpl>(
-            csprng, ed25519_provider, rsa_provider, ecdsa_provider,
-            secp256k1_provider, hmac_provider);
+            csprng, ed25519_provider, rsa_provider, ecdsa_provider, secp256k1_provider, hmac_provider);
     auto validator = std::make_shared<crypto::validator::KeyValidatorImpl>(crypto_provider);
 
-    // @todo Check if there is no error in the keypair generation
-    auto keypair = crypto_provider->generateKeys(crypto::Key::Type::Ed25519).value();
+    if (!keyPair)
+    {
+        // @todo Check if there is no error in the keypair generation
+        keyPair = crypto_provider->generateKeys(crypto::Key::Type::Ed25519).value();
+    }
 
-    return libp2p::injector::makeGossipInjector<
-        boost::di::extension::shared_config>(
-            boost::di::bind<crypto::CryptoProvider>().TEMPLATE_TO(
-                crypto_provider)[boost::di::override],
-            boost::di::bind<crypto::KeyPair>().TEMPLATE_TO(
-                std::move(keypair))[boost::di::override],
-            boost::di::bind<crypto::random::CSPRNG>().TEMPLATE_TO(
-                std::move(csprng))[boost::di::override],
-            boost::di::bind<crypto::marshaller::KeyMarshaller>()
-            .TEMPLATE_TO<crypto::marshaller::KeyMarshallerImpl>()[boost::di::override],
-            boost::di::bind<crypto::validator::KeyValidator>().TEMPLATE_TO(
-                std::move(validator))[boost::di::override],
+    auto injector = injector::makeGossipInjector<di::extension::shared_config>(
+        di::bind<crypto::CryptoProvider>().TEMPLATE_TO(crypto_provider)[di::override],
+        di::bind<crypto::KeyPair>().TEMPLATE_TO(std::move(*keyPair))[di::override],
+        di::bind<crypto::random::CSPRNG>().TEMPLATE_TO(std::move(csprng))[di::override],
+        di::bind<crypto::marshaller::KeyMarshaller>().TEMPLATE_TO<crypto::marshaller::KeyMarshallerImpl>()[di::override],
+        di::bind<crypto::validator::KeyValidator>().TEMPLATE_TO(std::move(validator))[di::override],
 
-            std::forward<decltype(args)>(args)...);
+        std::forward<decltype(args)>(args)...);
+
+    return injector;
 }
 }
 
 namespace sgns::ipfs_pubsub
 {
 GossipPubSub::GossipPubSub()
-    : m_logger(libp2p::common::createLogger("GossipPubSub"))
+{
+    Init(std::optional<libp2p::crypto::KeyPair>());
+}
+
+GossipPubSub::GossipPubSub(libp2p::crypto::KeyPair keyPair)
+{
+    Init(std::move(keyPair));
+}
+
+void GossipPubSub::Init(std::optional<libp2p::crypto::KeyPair> keyPair)
 {
     // Overriding default config to see local messages as well (echo mode)
     libp2p::protocol::gossip::Config config;
@@ -128,9 +136,7 @@ GossipPubSub::GossipPubSub()
 
     // Objects creating
     // Injector creates and ties dependent objects
-    auto injector = makeHostedGossipInjector(
-        libp2p::injector::useGossipConfig(config)
-    );
+    auto injector = makeCustomGossipInjector(std::move(keyPair), libp2p::injector::useGossipConfig(config));
 
     // Create asio context
     m_context = injector.create<std::shared_ptr<boost::asio::io_context>>();
