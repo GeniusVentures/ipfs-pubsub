@@ -252,7 +252,7 @@ void GossipPubSub::Stop()
 std::future<GossipPubSub::Subscription> GossipPubSub::Subscribe(const std::string& topic, MessageCallback onMessageCallback)
 {
     auto subscription = std::make_shared<std::promise<GossipPubSub::Subscription>>();
-    m_strand->post([subscription, this, topic, onMessageCallback]()
+    auto subsF = [subscription, this, topic, onMessageCallback]()
     {
         using Message = libp2p::protocol::gossip::Gossip::Message;
         // Forwarding is required to force assigment operator, otherwise subscription is cancelled.
@@ -261,7 +261,19 @@ std::future<GossipPubSub::Subscription> GossipPubSub::Subscribe(const std::strin
         {
             m_logger->info((boost::format("%s: PubSub subscribed to topic '%s'") % m_localAddress % topic).str());
         }
-    });
+    };
+
+    if (_serviceThread->get_id() != std::this_thread::get_id())
+    {
+        m_strand->post(subsF);
+    }
+    else
+    {
+        // Subscribe synchronously when the method is called from a pubsub callback
+        // For instance the method can be called from a topic message processing callback
+        // Otherwise a waiting for the subscription can lead to a dead lock
+        subsF();
+    }
     return subscription->get_future();
 }
 
