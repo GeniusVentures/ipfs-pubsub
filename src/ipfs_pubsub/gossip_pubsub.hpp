@@ -85,6 +85,11 @@ public:
     */
     const std::string& GetLocalAddress();
 
+    /** Returns an asio context that is used for gossip protocol handling.
+    * @return the asio context
+    */
+    std::shared_ptr<boost::asio::io_context> GetAsioContext() const;
+
 private:
     void Init(std::optional<libp2p::crypto::KeyPair> keyPair);
 

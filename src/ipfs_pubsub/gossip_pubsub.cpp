@@ -291,4 +291,8 @@ void GossipPubSub::Publish(const std::string& topic, const std::vector<uint8_t>&
     });
 }
 
+std::shared_ptr<boost::asio::io_context> GossipPubSub::GetAsioContext() const
+{
+    return m_context;
+}
 }
