@@ -90,6 +90,12 @@ public:
     */
     std::shared_ptr<boost::asio::io_context> GetAsioContext() const;
 
+    /** Transforms a peer id to formatted string.
+    * @param encoded peerId
+    * @return string representation of the passed peerId
+    */
+    static std::string FormatPeerId(const std::vector<uint8_t>& peerId);
+
 private:
     void Init(std::optional<libp2p::crypto::KeyPair> keyPair);
 

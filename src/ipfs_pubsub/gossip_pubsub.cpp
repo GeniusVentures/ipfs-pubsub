@@ -24,12 +24,6 @@ OUTCOME_CPP_DEFINE_CATEGORY_3(sgns::ipfs_pubsub, GossipPubSubError, e)
 
 namespace
 {
-std::string FormatPeerId(const std::vector<uint8_t>& bytes) 
-{
-    auto res = libp2p::peer::PeerId::fromBytes(bytes);
-    return res ? res.value().toBase58().substr(46) : "???";
-}
-
 std::string ToString(const std::vector<uint8_t>& buf)
 {
     // NOLINTNEXTLINE
@@ -118,6 +112,12 @@ auto makeCustomGossipInjector(std::optional<libp2p::crypto::KeyPair> keyPair, Ts
 
 namespace sgns::ipfs_pubsub
 {
+std::string GossipPubSub::FormatPeerId(const std::vector<uint8_t>& bytes)
+{
+    auto res = libp2p::peer::PeerId::fromBytes(bytes);
+    return res ? res.value().toBase58().substr(46) : "???";
+}
+
 GossipPubSub::GossipPubSub()
 {
     Init(std::optional<libp2p::crypto::KeyPair>());
