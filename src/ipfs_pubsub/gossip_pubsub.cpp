@@ -209,7 +209,7 @@ std::future<std::error_code> GossipPubSub::Start(
             }
         });
 
-        _serviceThread.reset(new std::thread([this]() { m_context->run(); }));
+        m_thread = std::thread([this]() { m_context->run(); });
 
         if (m_context->stopped())
         {
@@ -219,7 +219,6 @@ std::future<std::error_code> GossipPubSub::Start(
             {
                 result->set_value(GossipPubSubError::FAILED_SERVICE_START);
             }
-            _serviceThread.reset();
         }
     }
     return result->get_future();
@@ -227,15 +226,12 @@ std::future<std::error_code> GossipPubSub::Start(
 
 GossipPubSub::~GossipPubSub()
 {
-    if (_serviceThread)
-    {
-        Stop();
-    }
+    Stop();
 }
 
 void GossipPubSub::Stop()
 {
-    m_strand->post([this]()
+    auto stopF = [this]()
     {
         if (!m_context->stopped())
         {
@@ -243,11 +239,21 @@ void GossipPubSub::Stop()
             m_host->stop();
             m_context->stop();
         }
-    });
-    _serviceThread->join();
-    _serviceThread.reset();
-}
+    };
 
+    if (m_thread.get_id() == std::this_thread::get_id())
+    {
+        stopF();
+    }
+    else
+    {
+        m_strand->post(stopF);
+        if (m_thread.joinable())
+        {
+            m_thread.join();
+        }
+    }
+}
 
 std::future<GossipPubSub::Subscription> GossipPubSub::Subscribe(const std::string& topic, MessageCallback onMessageCallback)
 {
@@ -263,16 +269,16 @@ std::future<GossipPubSub::Subscription> GossipPubSub::Subscribe(const std::strin
         }
     };
 
-    if (_serviceThread->get_id() != std::this_thread::get_id())
-    {
-        m_strand->post(subsF);
-    }
-    else
+    if (m_thread.get_id() == std::this_thread::get_id())
     {
         // Subscribe synchronously when the method is called from a pubsub callback
         // For instance the method can be called from a topic message processing callback
         // Otherwise a waiting for the subscription can lead to a dead lock
         subsF();
+    }
+    else
+    {
+        m_strand->post(subsF);
     }
     return subscription->get_future();
 }

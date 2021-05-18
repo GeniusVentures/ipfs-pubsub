@@ -103,14 +103,15 @@ private:
     std::unique_ptr<boost::asio::io_context::strand> m_strand;
     std::shared_ptr<libp2p::Host> m_host;
     std::shared_ptr<libp2p::protocol::gossip::Gossip> m_gossip;
-    std::unique_ptr<std::thread> _serviceThread;
+    std::thread m_thread;
     std::string m_localAddress;
     libp2p::common::Logger m_logger = libp2p::common::createLogger("GossipPubSub");
 };
 
 inline bool GossipPubSub::IsStarted() const
 {
-    return _serviceThread ? true : false;
+    // The context was not stopped and working thread started
+    return (m_context && !m_context->stopped() && m_thread.joinable());
 }
 
 inline const std::string& GossipPubSub::GetLocalAddress()
