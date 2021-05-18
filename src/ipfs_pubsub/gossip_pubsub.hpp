@@ -80,6 +80,11 @@ public:
     */
     bool IsStarted() const;
 
+    /** Wait until the service is stopped.
+    * The Stop() method should be called from another thread.
+    */
+    void Wait();
+
     /** Returns the current service local address.
     * @return a string representation of the current peer local multi-address
     */

@@ -255,6 +255,14 @@ void GossipPubSub::Stop()
     }
 }
 
+void GossipPubSub::Wait()
+{
+    if ((m_thread.get_id() != std::this_thread::get_id()) && m_thread.joinable())
+    {
+        m_thread.join();
+    }
+}
+
 std::future<GossipPubSub::Subscription> GossipPubSub::Subscribe(const std::string& topic, MessageCallback onMessageCallback)
 {
     auto subscription = std::make_shared<std::promise<GossipPubSub::Subscription>>();
