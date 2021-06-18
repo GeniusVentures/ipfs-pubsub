@@ -8,5 +8,6 @@ target_include_directories(ipfs-pubsub-test PRIVATE ${GSL_INCLUDE_DIR})
 
 target_link_libraries(ipfs-pubsub-test
     ipfs-pubsub
+    ${WIN_CRYPT_LIBRARY}
     )
 
