@@ -14,10 +14,7 @@ find_package(spdlog CONFIG REQUIRED)
 find_package(tsl_hat_trie CONFIG REQUIRED)
 find_package(Boost.DI CONFIG REQUIRED)
 
-# BOOST library 
-set(Boost_USE_STATIC_LIBS ON) 
-set(Boost_USE_MULTITHREADED ON)  
-set(Boost_USE_STATIC_RUNTIME ON)
+# BOOST library
 find_package(Boost REQUIRED COMPONENTS random filesystem)
 
 
