@@ -1,5 +1,6 @@
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/src
     )
 
-add_subdirectory(ipfs_pubsub)
+add_subdirectory(src)
