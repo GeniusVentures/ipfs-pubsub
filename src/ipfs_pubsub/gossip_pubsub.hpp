@@ -10,7 +10,7 @@
 #include <libp2p/peer/peer_info.hpp>
 #include <libp2p/host/host.hpp>
 #include <libp2p/protocol/gossip/gossip.hpp>
-#include <libp2p/common/logger.hpp>
+#include <libp2p/log/logger.hpp>
 #include <libp2p/outcome/outcome.hpp>
 #include <optional>
 
@@ -110,7 +110,7 @@ private:
     std::shared_ptr<libp2p::protocol::gossip::Gossip> m_gossip;
     std::thread m_thread;
     std::string m_localAddress;
-    libp2p::common::Logger m_logger = libp2p::common::createLogger("GossipPubSub");
+    libp2p::log::Logger m_logger = libp2p::log::createLogger("GossipPubSub");
 };
 
 inline bool GossipPubSub::IsStarted() const
