@@ -96,7 +96,7 @@ auto makeCustomHostInjector(std::optional<libp2p::crypto::KeyPair> keyPair, Ts &
         keyPair = crypto_provider->generateKeys(crypto::Key::Type::Ed25519).value();
     }
 
-    auto injector = injector::makeHostInjector(
+    auto injector = injector::makeHostInjector<di::extension::shared_config>(
         di::bind<crypto::CryptoProvider>().TEMPLATE_TO(crypto_provider)[di::override],
         di::bind<crypto::KeyPair>().TEMPLATE_TO(std::move(*keyPair))[di::override],
         di::bind<crypto::random::CSPRNG>().TEMPLATE_TO(std::move(csprng))[di::override],

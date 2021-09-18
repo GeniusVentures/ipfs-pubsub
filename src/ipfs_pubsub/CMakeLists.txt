@@ -8,8 +8,6 @@ target_include_directories(ipfs-pubsub
     PUBLIC "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
 )
 
-
-
 target_link_libraries(ipfs-pubsub
     OpenSSL::Crypto
     OpenSSL::SSL
