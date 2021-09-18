@@ -13,10 +13,12 @@ find_package(OpenSSL REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(tsl_hat_trie CONFIG REQUIRED)
 find_package(Boost.DI CONFIG REQUIRED)
+find_package(c-ares CONFIG REQUIRED)
+find_package(fmt CONFIG REQUIRED)
+find_package(soralog CONFIG REQUIRED)
 
 # BOOST library
-find_package(Boost REQUIRED COMPONENTS random filesystem)
-
+find_package(Boost REQUIRED COMPONENTS random filesystem date_time regex)
 
 add_subdirectory(src)
 
@@ -24,6 +26,8 @@ add_subdirectory(src)
 find_package(GTest CONFIG REQUIRED)
 option(TESTING "Build tests" OFF)
 if (TESTING)
+    find_package(yaml-cpp CONFIG REQUIRED)
+    add_library(yaml-cpp::yaml-cpp ALIAS yaml-cpp)
     SET(WIN_CRYPT_LIBRARY)
     if (NOT UNIX)
         SET(WIN_CRYPT_LIBRARY crypt32)

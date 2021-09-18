@@ -2,31 +2,49 @@
 
 #include <gtest/gtest.h>
 #include <spdlog/sinks/basic_file_sink.h>
+#include <libp2p/log/configurator.hpp>
+#include <libp2p/log/logger.hpp>
 
 #include <libp2p/multi/multibase_codec/multibase_codec_impl.hpp>
 
 using GossipPubSub = sgns::ipfs_pubsub::GossipPubSub;
+const std::string logger_config(R"(
+# ----------------
+sinks:
+  - name: console
+    type: console
+    color: true
+groups:
+  - name: gossip_pubsub_test
+    sink: console
+    level: info
+    children:
+      - name: libp2p
+      - name: Gossip
+# ----------------
+  )");
 
 class GossipPubSubTest : public ::testing::Test
 {
 public:
     virtual void SetUp() override
     {
-        m_logger = spdlog::get("GossipPubSub");
-        if (!m_logger)
-        {
-            m_logger = spdlog::basic_logger_mt("GossipPubSub", "GossipPubSub.log", true);
-            m_logger->set_pattern("[%Y-%m-%d %H:%M:%S][%l] %v");
-            m_logger->set_level(spdlog::level::debug);
-        }
+        // prepare log system
+        auto logging_system = std::make_shared<soralog::LoggingSystem>(
+            std::make_shared<soralog::ConfiguratorFromYAML>(
+                // Original LibP2P logging config
+                std::make_shared<libp2p::log::Configurator>(),
+                // Additional logging config for application
+                logger_config));
+        logging_system->configure();
+
+        libp2p::log::setLoggingSystem(logging_system);
+        libp2p::log::setLevelOfGroup("gossip_pubsub_test", soralog::Level::DEBUG);
     }
 
     virtual void TearDown() override
     {
-        m_logger->flush();
     }
-
-    libp2p::common::Logger m_logger;
 };
 
 /**
@@ -218,6 +236,8 @@ TEST_F(GossipPubSubTest, MutipleGossipSubObjectsOnSingleChannel)
     std::this_thread::sleep_for(std::chrono::seconds(2));
 
     pubs2.Stop();
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+
     pubs1.Stop();
 
     ASSERT_EQ(receivedMessagesPubs1Topic1.size(), 1);
