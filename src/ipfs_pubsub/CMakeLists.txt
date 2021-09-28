@@ -1,6 +1,10 @@
 add_library(ipfs-pubsub
     gossip_pubsub.cpp
+    gossip_pubsub.hpp
     gossip_pubsub_topic.cpp
+    gossip_pubsub_topic.hpp
+    logger.cpp
+    logger.hpp
     )
 
 target_include_directories(ipfs-pubsub 

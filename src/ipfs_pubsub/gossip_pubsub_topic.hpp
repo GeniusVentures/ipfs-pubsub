@@ -1,7 +1,7 @@
-#ifndef GRPC_FOR_SUPERGENIUS_GOSSIBSUB_TOPIC
-#define GRPC_FOR_SUPERGENIUS_GOSSIBSUB_TOPIC
+#ifndef IPFS_PUBSUB_GOSSIP_PUBSUB_TOPIC
+#define IPFS_PUBSUB_GOSSIP_PUBSUB_TOPIC
 
-#include "ipfs_pubsub/gossip_pubsub.hpp"
+#include <ipfs_pubsub/gossip_pubsub.hpp>
 
 namespace sgns::ipfs_pubsub
 {
@@ -60,4 +60,4 @@ inline const std::string& GossipPubSubTopic::GetTopic() const
 
 }
 
-#endif // GRPC_FOR_SUPERGENIUS_GOSSIBSUB
+#endif // IPFS_PUBSUB_GOSSIP_PUBSUB_TOPIC

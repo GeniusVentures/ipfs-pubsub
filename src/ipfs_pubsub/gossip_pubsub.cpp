@@ -273,7 +273,7 @@ std::future<GossipPubSub::Subscription> GossipPubSub::Subscribe(const std::strin
         using Message = libp2p::protocol::gossip::Gossip::Message;
         // Forwarding is required to force assigment operator, otherwise subscription is cancelled.
         subscription->set_value(std::forward<Subscription>(m_gossip->subscribe({ topic }, onMessageCallback)));
-        if (m_logger->level() == soralog::Level::INFO)
+        if (m_logger->should_log(spdlog::level::info))
         {
             m_logger->info((boost::format("%s: PubSub subscribed to topic '%s'") % m_localAddress % topic).str());
         }
@@ -298,7 +298,7 @@ void GossipPubSub::Publish(const std::string& topic, const std::vector<uint8_t>&
     m_strand->post([topic, message, this]()
     {
         m_gossip->publish({ topic }, message);
-        if (m_logger->level() == soralog::Level::DEBUG)
+        if (m_logger->should_log(spdlog::level::debug))
         {
             m_logger->debug(
                 (boost::format("%s: Message published to topic '%s'")
