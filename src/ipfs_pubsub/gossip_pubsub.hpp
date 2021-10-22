@@ -1,5 +1,7 @@
-#ifndef GRPC_FOR_SUPERGENIUS_GOSSIBSUB
-#define GRPC_FOR_SUPERGENIUS_GOSSIBSUB
+#ifndef IPFS_PUBSUB_GOSSIP_PUBSUB
+#define IPFS_PUBSUB_GOSSIP_PUBSUB
+
+#include <ipfs_pubsub/logger.hpp>
 
 #include <string>
 
@@ -10,7 +12,6 @@
 #include <libp2p/peer/peer_info.hpp>
 #include <libp2p/host/host.hpp>
 #include <libp2p/protocol/gossip/gossip.hpp>
-#include <libp2p/common/logger.hpp>
 #include <libp2p/outcome/outcome.hpp>
 #include <optional>
 
@@ -110,7 +111,7 @@ private:
     std::shared_ptr<libp2p::protocol::gossip::Gossip> m_gossip;
     std::thread m_thread;
     std::string m_localAddress;
-    libp2p::common::Logger m_logger = libp2p::common::createLogger("GossipPubSub");
+    Logger m_logger = createLogger("GossipPubSub");
 };
 
 inline bool GossipPubSub::IsStarted() const
@@ -128,4 +129,4 @@ inline const std::string& GossipPubSub::GetLocalAddress()
 
 OUTCOME_HPP_DECLARE_ERROR_2(sgns::ipfs_pubsub, GossipPubSubError);
 
-#endif // GRPC_FOR_SUPERGENIUS_GOSSIBSUB
+#endif // IPFS_PUBSUB_GOSSIP_PUBSUB

@@ -1,14 +1,16 @@
 add_library(ipfs-pubsub
     gossip_pubsub.cpp
+    gossip_pubsub.hpp
     gossip_pubsub_topic.cpp
+    gossip_pubsub_topic.hpp
+    logger.cpp
+    logger.hpp
     )
 
 target_include_directories(ipfs-pubsub 
     PRIVATE ${GSL_INCLUDE_DIR}
     PUBLIC "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
 )
-
-
 
 target_link_libraries(ipfs-pubsub
     OpenSSL::Crypto

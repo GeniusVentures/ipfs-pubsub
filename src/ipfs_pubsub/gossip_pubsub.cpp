@@ -2,8 +2,7 @@
 
 #include <iostream>
 #include <boost/format.hpp>
-#include <libp2p/injector/gossip_injector.hpp>
-#include <libp2p/injector/network_injector.hpp>
+#include <libp2p/injector/host_injector.hpp>
 
 #include <boost/di/extension/scopes/shared.hpp>
 
@@ -75,7 +74,7 @@ boost::optional<libp2p::peer::PeerInfo> PeerInfoFromString(const std::string& st
 }
 
 template <typename... Ts>
-auto makeCustomGossipInjector(std::optional<libp2p::crypto::KeyPair> keyPair, Ts &&... args)
+auto makeCustomHostInjector(std::optional<libp2p::crypto::KeyPair> keyPair, Ts &&... args)
 {
     using namespace libp2p;
     namespace di = boost::di;
@@ -97,7 +96,7 @@ auto makeCustomGossipInjector(std::optional<libp2p::crypto::KeyPair> keyPair, Ts
         keyPair = crypto_provider->generateKeys(crypto::Key::Type::Ed25519).value();
     }
 
-    auto injector = injector::makeGossipInjector<di::extension::shared_config>(
+    auto injector = injector::makeHostInjector<di::extension::shared_config>(
         di::bind<crypto::CryptoProvider>().TEMPLATE_TO(crypto_provider)[di::override],
         di::bind<crypto::KeyPair>().TEMPLATE_TO(std::move(*keyPair))[di::override],
         di::bind<crypto::random::CSPRNG>().TEMPLATE_TO(std::move(csprng))[di::override],
@@ -136,7 +135,8 @@ void GossipPubSub::Init(std::optional<libp2p::crypto::KeyPair> keyPair)
 
     // Objects creating
     // Injector creates and ties dependent objects
-    auto injector = makeCustomGossipInjector(std::move(keyPair), libp2p::injector::useGossipConfig(config));
+    //auto injector = libp2p::injector::makeHostInjector();// std::move(keyPair));
+    auto injector = makeCustomHostInjector(std::move(keyPair));
 
     // Create asio context
     m_context = injector.create<std::shared_ptr<boost::asio::io_context>>();
@@ -146,7 +146,9 @@ void GossipPubSub::Init(std::optional<libp2p::crypto::KeyPair> keyPair)
     m_host = injector.create<std::shared_ptr<libp2p::Host>>();
 
     // Create gossip node
-    m_gossip = injector.create<std::shared_ptr<libp2p::protocol::gossip::Gossip>>();
+    m_gossip = libp2p::protocol::gossip::create(
+      injector.create<std::shared_ptr<libp2p::basic::Scheduler>>(), m_host,
+      std::move(config));
 }
 
 std::future<std::error_code> GossipPubSub::Start(
