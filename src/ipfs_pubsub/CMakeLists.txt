@@ -24,4 +24,5 @@ target_link_libraries(ipfs-pubsub
     p2p::p2p_inmem_protocol_repository
     p2p::p2p_gossip
     p2p::asio_scheduler
+    spdlog::spdlog
     )
