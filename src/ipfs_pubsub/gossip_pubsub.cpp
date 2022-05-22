@@ -147,8 +147,11 @@ void GossipPubSub::Init(std::optional<libp2p::crypto::KeyPair> keyPair)
 
     // Create gossip node
     m_gossip = libp2p::protocol::gossip::create(
-      injector.create<std::shared_ptr<libp2p::basic::Scheduler>>(), m_host,
-      std::move(config));
+        injector.create<std::shared_ptr<libp2p::basic::Scheduler>>(), m_host,
+        injector.create<std::shared_ptr<libp2p::peer::IdentityManager>>(),
+        injector.create<std::shared_ptr<libp2p::crypto::CryptoProvider>>(),
+        injector.create<std::shared_ptr<libp2p::crypto::marshaller::KeyMarshaller>>(),
+        std::move(config));
 }
 
 std::future<std::error_code> GossipPubSub::Start(
