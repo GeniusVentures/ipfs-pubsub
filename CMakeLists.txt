@@ -17,8 +17,6 @@ find_package(Boost.DI CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 find_package(soralog CONFIG REQUIRED)
 
-add_compile_definitions(SPDLOG_FMT_EXTERNAL)
-
 # BOOST library
 find_package(Boost REQUIRED COMPONENTS random filesystem date_time regex)
 
