@@ -7,7 +7,7 @@ git clone --recurse-submodules ssh://git@gitlab.geniusventures.io:8487/GeniusVen
 # Build on Windows
 ## Dependency 
     - openssl
-    - boost (tested on version 1.72.0)
+    - boost (tested on version 1.78.0)
     - protobuf 
 ## Build
     cmake ../.. -G "Visual Studio 15 2017 Win64"    -DBUILD_TESTING=OFF -DCMAKE_USE_OPENSSL=ON     -DBOOST_ROOT="C:/local/boost_1_72_0"  \
@@ -17,7 +17,7 @@ git clone --recurse-submodules ssh://git@gitlab.geniusventures.io:8487/GeniusVen
     
 ## Dependency 
     - openssl
-    - boost (tested on version 1.72.0)
+    - boost (tested on version 1.78.0)
     - protobuf 
 ## Build
     mkdir build & cd build
@@ -27,7 +27,7 @@ git clone --recurse-submodules ssh://git@gitlab.geniusventures.io:8487/GeniusVen
 # Build for Android
 ## Dependency 
     - openssl
-    - boost (tested on version 1.72.0)
+    - boost (tested on version 1.78.0)
     - protobuf 
     - Android NDK
 ## Build
