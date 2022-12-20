@@ -262,7 +262,7 @@ void GossipPubSub::Stop()
 
 void GossipPubSub::Wait()
 {
-    if ((m_thread.get_id() != std::this_thread::get_id()) && m_thread.joinable())
+    if (!(m_thread.get_id() == std::this_thread::get_id()) && m_thread.joinable())
     {
         m_thread.join();
     }
