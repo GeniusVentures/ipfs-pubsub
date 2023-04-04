@@ -2,7 +2,7 @@ This is the project for implementing IPFS pubsub system.
 
 Please clone :
 
-git clone --recurse-submodules ssh://git@gitlab.geniusventures.io:8487/GeniusVentures/ipfs-pubsub.git
+git clone --recurse-submodules ssh://github.com/GeniusVentures/ipfs-pubsub.git
 
 # Build on Windows
 ## Dependency 
