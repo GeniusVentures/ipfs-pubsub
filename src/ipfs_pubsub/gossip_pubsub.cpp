@@ -132,7 +132,7 @@ void GossipPubSub::Init(std::optional<libp2p::crypto::KeyPair> keyPair)
     // Overriding default config to see local messages as well (echo mode)
     libp2p::protocol::gossip::Config config;
     config.echo_forward_mode = true;
-
+    config.sign_messages = true;
     // Objects creating
     // Injector creates and ties dependent objects
     //auto injector = libp2p::injector::makeHostInjector();// std::move(keyPair));
