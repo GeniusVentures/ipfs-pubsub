@@ -47,6 +47,8 @@ public:
     * @return topic id
     */
     const std::string& GetTopic() const;
+    const std::shared_ptr<GossipPubSub> GetPubsub() const;
+
 private:
     std::shared_ptr<GossipPubSub> m_gossipPubSub;
     std::string m_topic;
@@ -56,6 +58,10 @@ private:
 inline const std::string& GossipPubSubTopic::GetTopic() const
 {
     return m_topic;
+}
+inline const std::shared_ptr<GossipPubSub> GossipPubSubTopic::GetPubsub() const
+{
+    return m_gossipPubSub;
 }
 
 }

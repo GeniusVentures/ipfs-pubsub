@@ -102,6 +102,8 @@ public:
     */
     static std::string FormatPeerId(const std::vector<uint8_t>& peerId);
 
+    const std::shared_ptr<libp2p::Host> GetHost() const;
+
 private:
     void Init(std::optional<libp2p::crypto::KeyPair> keyPair);
 
@@ -123,6 +125,11 @@ inline bool GossipPubSub::IsStarted() const
 inline const std::string& GossipPubSub::GetLocalAddress()
 {
     return m_localAddress;
+}
+
+inline const std::shared_ptr<libp2p::Host> GossipPubSub::GetHost() const
+{
+    return m_host;
 }
 
 }
