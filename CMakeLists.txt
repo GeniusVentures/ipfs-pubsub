@@ -5,6 +5,7 @@ project(ipfs-pubsub VERSION 0.1)
 include(GNUInstallDirs)
 
 message("Protobuf_DIR " ${Protobuf_DIR})
+message("IPFS LITE DIR "${ipfs-lite-cpp_DIR})
 find_package(Protobuf CONFIG REQUIRED)
 
 # libp2p and its dependencies
@@ -16,6 +17,7 @@ find_package(Boost.DI CONFIG REQUIRED)
 #find_package(c-ares CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 find_package(soralog CONFIG REQUIRED)
+find_package(ipfs-lite-cpp CONFIG REQUIRED)
 
 # BOOST library
 find_package(Boost REQUIRED COMPONENTS random filesystem date_time regex)

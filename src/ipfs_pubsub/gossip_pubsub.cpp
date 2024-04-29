@@ -78,6 +78,11 @@ auto makeCustomHostInjector(std::optional<libp2p::crypto::KeyPair> keyPair, Ts &
 {
     using namespace libp2p;
     namespace di = boost::di;
+    
+    libp2p::protocol::kademlia::Config kademlia_config;
+    kademlia_config.randomWalk.enabled = true;
+    kademlia_config.randomWalk.interval = std::chrono::seconds(300);
+    kademlia_config.requestConcurency = 20;
 
     auto csprng = std::make_shared<crypto::random::BoostRandomGenerator>();
     auto ed25519_provider = std::make_shared<crypto::ed25519::Ed25519ProviderImpl>();
@@ -102,7 +107,9 @@ auto makeCustomHostInjector(std::optional<libp2p::crypto::KeyPair> keyPair, Ts &
         di::bind<crypto::random::CSPRNG>().TEMPLATE_TO(std::move(csprng))[di::override],
         di::bind<crypto::marshaller::KeyMarshaller>().TEMPLATE_TO<crypto::marshaller::KeyMarshallerImpl>()[di::override],
         di::bind<crypto::validator::KeyValidator>().TEMPLATE_TO(std::move(validator))[di::override],
-
+        //Kademlia
+        libp2p::injector::makeKademliaInjector(
+            libp2p::injector::useKademliaConfig(kademlia_config)),
         std::forward<decltype(args)>(args)...);
 
     return injector;
@@ -134,6 +141,7 @@ void GossipPubSub::Init(std::optional<libp2p::crypto::KeyPair> keyPair)
     config.echo_forward_mode = true;
     config.sign_messages = true;
     // Objects creating
+
     // Injector creates and ties dependent objects
     //auto injector = libp2p::injector::makeHostInjector();// std::move(keyPair));
     auto injector = makeCustomHostInjector(std::move(keyPair));
@@ -152,6 +160,12 @@ void GossipPubSub::Init(std::optional<libp2p::crypto::KeyPair> keyPair)
         injector.create<std::shared_ptr<libp2p::crypto::CryptoProvider>>(),
         injector.create<std::shared_ptr<libp2p::crypto::marshaller::KeyMarshaller>>(),
         std::move(config));
+
+    auto kademlia =
+        injector
+        .create<std::shared_ptr<libp2p::protocol::kademlia::Kademlia>>();
+            //Initialize DHT
+    dht_ = std::make_shared<sgns::ipfs_lite::ipfs::dht::IpfsDHT>(kademlia, bootstrapAddresses_);
 }
 
 std::future<std::error_code> GossipPubSub::Start(
