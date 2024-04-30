@@ -78,7 +78,7 @@ auto makeCustomHostInjector(std::optional<libp2p::crypto::KeyPair> keyPair, Ts &
 {
     using namespace libp2p;
     namespace di = boost::di;
-    
+
     libp2p::protocol::kademlia::Config kademlia_config;
     kademlia_config.randomWalk.enabled = true;
     kademlia_config.randomWalk.interval = std::chrono::seconds(300);
@@ -118,214 +118,244 @@ auto makeCustomHostInjector(std::optional<libp2p::crypto::KeyPair> keyPair, Ts &
 
 namespace sgns::ipfs_pubsub
 {
-std::string GossipPubSub::FormatPeerId(const std::vector<uint8_t>& bytes)
-{
-    auto res = libp2p::peer::PeerId::fromBytes(bytes);
-    return res ? res.value().toBase58().substr(46) : "???";
-}
-
-GossipPubSub::GossipPubSub()
-{
-    Init(std::optional<libp2p::crypto::KeyPair>());
-}
-
-GossipPubSub::GossipPubSub(libp2p::crypto::KeyPair keyPair)
-{
-    Init(std::move(keyPair));
-}
-
-void GossipPubSub::Init(std::optional<libp2p::crypto::KeyPair> keyPair)
-{
-    // Overriding default config to see local messages as well (echo mode)
-    libp2p::protocol::gossip::Config config;
-    config.echo_forward_mode = true;
-    config.sign_messages = true;
-    // Objects creating
-
-    // Injector creates and ties dependent objects
-    //auto injector = libp2p::injector::makeHostInjector();// std::move(keyPair));
-    auto injector = makeCustomHostInjector(std::move(keyPair));
-
-    // Create asio context
-    m_context = injector.create<std::shared_ptr<boost::asio::io_context>>();
-    m_strand = std::make_unique<boost::asio::io_context::strand>(*m_context);
-
-    // host is our local libp2p node
-    m_host = injector.create<std::shared_ptr<libp2p::Host>>();
-
-    // Create gossip node
-    m_gossip = libp2p::protocol::gossip::create(
-        injector.create<std::shared_ptr<libp2p::basic::Scheduler>>(), m_host,
-        injector.create<std::shared_ptr<libp2p::peer::IdentityManager>>(),
-        injector.create<std::shared_ptr<libp2p::crypto::CryptoProvider>>(),
-        injector.create<std::shared_ptr<libp2p::crypto::marshaller::KeyMarshaller>>(),
-        std::move(config));
-
-    auto kademlia =
-        injector
-        .create<std::shared_ptr<libp2p::protocol::kademlia::Kademlia>>();
-            //Initialize DHT
-    dht_ = std::make_shared<sgns::ipfs_lite::ipfs::dht::IpfsDHT>(kademlia, bootstrapAddresses_);
-}
-
-std::future<std::error_code> GossipPubSub::Start(
-    int listeningPort, 
-    const std::vector<std::string>& booststrapPeers)
-{
-    auto result = std::make_shared<std::promise<std::error_code>>();
-    if (IsStarted())
+    std::string GossipPubSub::FormatPeerId(const std::vector<uint8_t>& bytes)
     {
-        m_logger->info((boost::format("%s PubSub service was previously started") % m_localAddress).str());
-        result->set_value(std::error_code());
-        return result->get_future();
+        auto res = libp2p::peer::PeerId::fromBytes(bytes);
+        return res ? res.value().toBase58().substr(46) : "???";
     }
 
-    // Make peer uri of local node
-    m_localAddress = (boost::format("/ip4/%s/tcp/%d/p2p/%s") % GetLocalIP(*m_context) % listeningPort % m_host->getId().toBase58()).str();
-    m_logger->info((boost::format("%s: Starting PubSub service") % m_localAddress).str());
-
-    // Tell gossip to connect to remote peers, only if specified
-    for (const auto& remotePeerAddress : booststrapPeers)
+    GossipPubSub::GossipPubSub()
     {
-        boost::optional<libp2p::peer::PeerInfo> remotePeerInfo = PeerInfoFromString(remotePeerAddress);
-        if (remotePeerInfo)
+        Init(std::optional<libp2p::crypto::KeyPair>());
+    }
+
+    GossipPubSub::GossipPubSub(libp2p::crypto::KeyPair keyPair)
+    {
+        Init(std::move(keyPair));
+    }
+
+    void GossipPubSub::Init(std::optional<libp2p::crypto::KeyPair> keyPair)
+    {
+        // Overriding default config to see local messages as well (echo mode)
+        libp2p::protocol::gossip::Config config;
+        config.echo_forward_mode = true;
+        config.sign_messages = true;
+        // Objects creating
+
+        // Injector creates and ties dependent objects
+        //auto injector = libp2p::injector::makeHostInjector();// std::move(keyPair));
+        auto injector = makeCustomHostInjector(std::move(keyPair));
+
+        // Create asio context
+        m_context = injector.create<std::shared_ptr<boost::asio::io_context>>();
+        m_strand = std::make_unique<boost::asio::io_context::strand>(*m_context);
+
+        // host is our local libp2p node
+        m_host = injector.create<std::shared_ptr<libp2p::Host>>();
+
+        // Create gossip node
+        m_gossip = libp2p::protocol::gossip::create(
+            injector.create<std::shared_ptr<libp2p::basic::Scheduler>>(), m_host,
+            injector.create<std::shared_ptr<libp2p::peer::IdentityManager>>(),
+            injector.create<std::shared_ptr<libp2p::crypto::CryptoProvider>>(),
+            injector.create<std::shared_ptr<libp2p::crypto::marshaller::KeyMarshaller>>(),
+            std::move(config));
+
+        auto kademlia =
+            injector
+            .create<std::shared_ptr<libp2p::protocol::kademlia::Kademlia>>();
+                //Initialize DHT
+        dht_ = std::make_shared<sgns::ipfs_lite::ipfs::dht::IpfsDHT>(kademlia, bootstrapAddresses_);
+    }
+
+    std::future<std::error_code> GossipPubSub::Start(
+        int listeningPort, 
+        const std::vector<std::string>& booststrapPeers)
+    {
+        auto result = std::make_shared<std::promise<std::error_code>>();
+        if (IsStarted())
         {
-            m_gossip->addBootstrapPeer(remotePeerInfo->id, remotePeerInfo->addresses[0]);
+            m_logger->info((boost::format("%s PubSub service was previously started") % m_localAddress).str());
+            result->set_value(std::error_code());
+            return result->get_future();
         }
-    }
+
+        // Make peer uri of local node
+        m_localAddress = (boost::format("/ip4/%s/tcp/%d/p2p/%s") % GetLocalIP(*m_context) % listeningPort % m_host->getId().toBase58()).str();
+        m_logger->info((boost::format("%s: Starting PubSub service") % m_localAddress).str());
+
+        // Tell gossip to connect to remote peers, only if specified
+        for (const auto& remotePeerAddress : booststrapPeers)
+        {
+            boost::optional<libp2p::peer::PeerInfo> remotePeerInfo = PeerInfoFromString(remotePeerAddress);
+            if (remotePeerInfo)
+            {
+                m_gossip->addBootstrapPeer(remotePeerInfo->id, remotePeerInfo->addresses[0]);
+            }
+        }
 
 
-    // Local address -> peer info
-    boost::optional<libp2p::peer::PeerInfo> peerInfo = PeerInfoFromString(m_localAddress);
-    if (!peerInfo)
-    {
-        auto errorMessage = (boost::format("%s: Cannot resolve local peer from the address") % m_localAddress).str();
-        m_logger->error(errorMessage);
-        result->set_value(GossipPubSubError::INVALID_LOCAL_ADDRESS);
+        // Local address -> peer info
+        boost::optional<libp2p::peer::PeerInfo> peerInfo = PeerInfoFromString(m_localAddress);
+        if (!peerInfo)
+        {
+            auto errorMessage = (boost::format("%s: Cannot resolve local peer from the address") % m_localAddress).str();
+            m_logger->error(errorMessage);
+            result->set_value(GossipPubSubError::INVALID_LOCAL_ADDRESS);
+            return result->get_future();
+        }
+        else
+        {
+            // Start the node as soon as async engine starts
+            m_strand->post([result, peerInfo, this]
+            {
+                auto listen_res = m_host->listen(peerInfo->addresses[0]);
+                if (!listen_res)
+                {
+                    m_context->stop();
+                    m_logger->error("Cannot listen to multiaddress: {}, detais {}", 
+                        peerInfo->addresses[0].getStringAddress(), 
+                        listen_res.error().message());
+
+                    result->set_value(GossipPubSubError::FAILED_LOCAL_ADDRESS_LISTENING);
+                }
+                else
+                {
+                    m_host->start();
+                    m_gossip->start();
+                    m_logger->info((boost::format("%s : PubSub service started") % m_localAddress).str());
+                    result->set_value(std::error_code());
+                }
+            });
+
+            m_thread = std::thread([this]() { m_context->run(); });
+
+            if (m_context->stopped())
+            {
+                auto errorMessage = (boost::format("%s: PubSub service failed to start") % m_localAddress).str();
+                m_logger->error(errorMessage);
+                if (!result->get_future().valid())
+                {
+                    result->set_value(GossipPubSubError::FAILED_SERVICE_START);
+                }
+            }
+        }
         return result->get_future();
     }
-    else
-    {
-        // Start the node as soon as async engine starts
-        m_strand->post([result, peerInfo, this]
-        {
-            auto listen_res = m_host->listen(peerInfo->addresses[0]);
-            if (!listen_res)
-            {
-                m_context->stop();
-                m_logger->error("Cannot listen to multiaddress: {}, detais {}", 
-                    peerInfo->addresses[0].getStringAddress(), 
-                    listen_res.error().message());
 
-                result->set_value(GossipPubSubError::FAILED_LOCAL_ADDRESS_LISTENING);
+
+    bool GossipPubSub::StartFindingPeers(
+        std::shared_ptr<boost::asio::io_context> ioc,
+        const libp2p::multi::ContentIdentifier& cid
+    )
+    {
+        auto peer_id =
+            libp2p::peer::PeerId::fromHash(cid.content_address).value();
+        dht_->FindProviders(cid, [=](libp2p::outcome::result<std::vector<libp2p::peer::PeerInfo>> res) {
+            if (!res) {
+                std::cerr << "Cannot find providers: " << res.error().message() << std::endl;
+                return false;
+            }
+            auto& providers = res.value();
+            if (!providers.empty())
+            {
+                for (auto& provider : providers) {
+                    m_gossip->addBootstrapPeer(provider.id, provider.addresses[0]);               
+                }
             }
             else
             {
-                m_host->start();
-                m_gossip->start();
-                m_logger->info((boost::format("%s : PubSub service started") % m_localAddress).str());
-                result->set_value(std::error_code());
+                std::cout << "Empty providers list received" << std::endl;
+                //StartFindingPeersWithRetry(ioc, cid, filename, addressoffset, parse, save, handle_read, status);
+                return false;
             }
-        });
+            });
+        return false;
+    }
 
-        m_thread = std::thread([this]() { m_context->run(); });
+    GossipPubSub::~GossipPubSub()
+    {
+        Stop();
+    }
 
-        if (m_context->stopped())
+    void GossipPubSub::Stop()
+    {
+        auto stopF = [this]()
         {
-            auto errorMessage = (boost::format("%s: PubSub service failed to start") % m_localAddress).str();
-            m_logger->error(errorMessage);
-            if (!result->get_future().valid())
+            if (!m_context->stopped())
             {
-                result->set_value(GossipPubSubError::FAILED_SERVICE_START);
+                m_gossip->stop();
+                m_host->stop();
+                m_context->stop();
+            }
+        };
+
+        if (m_thread.get_id() == std::this_thread::get_id())
+        {
+            stopF();
+        }
+        else
+        {
+            m_strand->post(stopF);
+            if (m_thread.joinable())
+            {
+                m_thread.join();
             }
         }
     }
-    return result->get_future();
-}
 
-GossipPubSub::~GossipPubSub()
-{
-    Stop();
-}
-
-void GossipPubSub::Stop()
-{
-    auto stopF = [this]()
+    void GossipPubSub::Wait()
     {
-        if (!m_context->stopped())
-        {
-            m_gossip->stop();
-            m_host->stop();
-            m_context->stop();
-        }
-    };
-
-    if (m_thread.get_id() == std::this_thread::get_id())
-    {
-        stopF();
-    }
-    else
-    {
-        m_strand->post(stopF);
-        if (m_thread.joinable())
+        if (!(m_thread.get_id() == std::this_thread::get_id()) && m_thread.joinable())
         {
             m_thread.join();
         }
     }
-}
 
-void GossipPubSub::Wait()
-{
-    if (!(m_thread.get_id() == std::this_thread::get_id()) && m_thread.joinable())
+    std::future<GossipPubSub::Subscription> GossipPubSub::Subscribe(const std::string& topic, MessageCallback onMessageCallback)
     {
-        m_thread.join();
-    }
-}
-
-std::future<GossipPubSub::Subscription> GossipPubSub::Subscribe(const std::string& topic, MessageCallback onMessageCallback)
-{
-    auto subscription = std::make_shared<std::promise<GossipPubSub::Subscription>>();
-    auto subsF = [subscription, this, topic, onMessageCallback]()
-    {
-        using Message = libp2p::protocol::gossip::Gossip::Message;
-        // Forwarding is required to force assigment operator, otherwise subscription is cancelled.
-        subscription->set_value(std::forward<Subscription>(m_gossip->subscribe({ topic }, onMessageCallback)));
-        if (m_logger->should_log(spdlog::level::info))
+        auto subscription = std::make_shared<std::promise<GossipPubSub::Subscription>>();
+        auto subsF = [subscription, this, topic, onMessageCallback]()
         {
-            m_logger->info((boost::format("%s: PubSub subscribed to topic '%s'") % m_localAddress % topic).str());
-        }
-    };
+            using Message = libp2p::protocol::gossip::Gossip::Message;
+            // Forwarding is required to force assigment operator, otherwise subscription is cancelled.
+            subscription->set_value(std::forward<Subscription>(m_gossip->subscribe({ topic }, onMessageCallback)));
+            if (m_logger->should_log(spdlog::level::info))
+            {
+                m_logger->info((boost::format("%s: PubSub subscribed to topic '%s'") % m_localAddress % topic).str());
+            }
+        };
 
-    if (m_thread.get_id() == std::this_thread::get_id())
-    {
-        // Subscribe synchronously when the method is called from a pubsub callback
-        // For instance the method can be called from a topic message processing callback
-        // Otherwise a waiting for the subscription can lead to a dead lock
-        subsF();
-    }
-    else
-    {
-        m_strand->post(subsF);
-    }
-    return subscription->get_future();
-}
-
-void GossipPubSub::Publish(const std::string& topic, const std::vector<uint8_t>& message)
-{
-    m_strand->post([topic, message, this]()
-    {
-        m_gossip->publish({ topic }, message);
-        if (m_logger->should_log(spdlog::level::debug))
+        if (m_thread.get_id() == std::this_thread::get_id())
         {
-            m_logger->debug(
-                (boost::format("%s: Message published to topic '%s'")
-                    % m_localAddress % topic).str());
+            // Subscribe synchronously when the method is called from a pubsub callback
+            // For instance the method can be called from a topic message processing callback
+            // Otherwise a waiting for the subscription can lead to a dead lock
+            subsF();
         }
-    });
-}
+        else
+        {
+            m_strand->post(subsF);
+        }
+        return subscription->get_future();
+    }
 
-std::shared_ptr<boost::asio::io_context> GossipPubSub::GetAsioContext() const
-{
-    return m_context;
-}
+    void GossipPubSub::Publish(const std::string& topic, const std::vector<uint8_t>& message)
+    {
+        m_strand->post([topic, message, this]()
+        {
+            m_gossip->publish({ topic }, message);
+            if (m_logger->should_log(spdlog::level::debug))
+            {
+                m_logger->debug(
+                    (boost::format("%s: Message published to topic '%s'")
+                        % m_localAddress % topic).str());
+            }
+        });
+    }
+
+    std::shared_ptr<boost::asio::io_context> GossipPubSub::GetAsioContext() const
+    {
+        return m_context;
+    }
 }

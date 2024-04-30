@@ -104,6 +104,16 @@ public:
     */
     static std::string FormatPeerId(const std::vector<uint8_t>& peerId);
 
+    /**
+     * Find peers with the CID we are looking for using Kademlia DHT.
+     * @param ioc - Asio io context to use
+     * @param cid - IPFS Main CID to get from bitswap
+     * @param handle_read - Filemanager callback on completion
+     */
+    bool StartFindingPeers(
+        std::shared_ptr<boost::asio::io_context> ioc,
+        const libp2p::multi::ContentIdentifier& cid
+    );
     const std::shared_ptr<libp2p::Host> GetHost() const;
 
 private:
