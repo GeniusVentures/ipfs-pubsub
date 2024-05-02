@@ -249,8 +249,8 @@ namespace sgns::ipfs_pubsub
         const libp2p::multi::ContentIdentifier& cid
     )
     {
-        auto peer_id =
-            libp2p::peer::PeerId::fromHash(cid.content_address).value();
+        // auto peer_id =
+        //     libp2p::peer::PeerId::fromHash(cid.content_address).value();
         dht_->FindProviders(cid, [=](libp2p::outcome::result<std::vector<libp2p::peer::PeerInfo>> res) {
             if (!res) {
                 std::cerr << "Cannot find providers: " << res.error().message() << std::endl;
@@ -271,6 +271,34 @@ namespace sgns::ipfs_pubsub
             }
             });
         return false;
+    }
+    bool GossipPubSub::StartFindingPeers(
+            std::shared_ptr<boost::asio::io_context> ioc,
+            const libp2p::protocol::kademlia::ContentId& key
+        )
+    {
+        // auto peer_id =
+        //     libp2p::peer::PeerId::fromHash(cid.content_address).value();
+        dht_->FindProviders(key, [=](libp2p::outcome::result<std::vector<libp2p::peer::PeerInfo>> res) {
+            if (!res) {
+                std::cerr << "Cannot find providers: " << res.error().message() << std::endl;
+                return false;
+            }
+            auto& providers = res.value();
+            if (!providers.empty())
+            {
+                for (auto& provider : providers) {
+                    m_gossip->addBootstrapPeer(provider.id, provider.addresses[0]);               
+                }
+            }
+            else
+            {
+                std::cout << "Empty providers list received" << std::endl;
+                //StartFindingPeersWithRetry(ioc, cid, filename, addressoffset, parse, save, handle_read, status);
+                return false;
+            }
+            });
+        return false;        
     }
 
     GossipPubSub::~GossipPubSub()
