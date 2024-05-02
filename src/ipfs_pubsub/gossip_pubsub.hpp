@@ -108,11 +108,19 @@ namespace sgns::ipfs_pubsub
          * Find peers with the CID we are looking for using Kademlia DHT.
          * @param ioc - Asio io context to use
          * @param cid - IPFS Main CID to get from bitswap
-         * @param handle_read - Filemanager callback on completion
          */
         bool StartFindingPeers(
             std::shared_ptr<boost::asio::io_context> ioc,
             const libp2p::multi::ContentIdentifier& cid
+        );
+        /**
+         * Find peers with the CID we are looking for using Kademlia DHT.
+         * @param ioc - Asio io context to use
+         * @param key - IPFS Main CID to get from bitswap
+         */
+        bool StartFindingPeers(
+            std::shared_ptr<boost::asio::io_context> ioc,
+            const libp2p::protocol::kademlia::ContentId& key
         );
         const std::shared_ptr<libp2p::Host> GetHost() const;
         const std::shared_ptr<sgns::ipfs_lite::ipfs::dht::IpfsDHT> GetDHT() const;
