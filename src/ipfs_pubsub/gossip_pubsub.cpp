@@ -161,11 +161,18 @@ namespace sgns::ipfs_pubsub
             injector.create<std::shared_ptr<libp2p::crypto::marshaller::KeyMarshaller>>(),
             std::move(config));
 
+        //Make a DHT
         auto kademlia =
             injector
             .create<std::shared_ptr<libp2p::protocol::kademlia::Kademlia>>();
                 //Initialize DHT
         dht_ = std::make_shared<sgns::ipfs_lite::ipfs::dht::IpfsDHT>(kademlia, bootstrapAddresses_);
+
+        //Make Identify
+        m_identifymsgproc = std::make_shared<libp2p::protocol::IdentifyMessageProcessor>(
+            *m_host, m_host->getNetwork().getConnectionManager(), *injector.create<std::shared_ptr<libp2p::peer::IdentityManager>>(), injector.create<std::shared_ptr<libp2p::crypto::marshaller::KeyMarshaller>>());
+        m_identify = std::make_shared<libp2p::protocol::Identify>(*m_host, m_identifymsgproc, m_host->getBus());       
+        m_identify->start();
     }
 
     std::future<std::error_code> GossipPubSub::Start(
