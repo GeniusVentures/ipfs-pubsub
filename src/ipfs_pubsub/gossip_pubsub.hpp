@@ -16,6 +16,7 @@
 #include <optional>
 #include "ipfs_lite/dht/kademlia_dht.hpp"
 #include "libp2p/injector/kademlia_injector.hpp"
+#include <libp2p/protocol/identify/identify.hpp>
 
 namespace sgns::ipfs_pubsub
 {
@@ -129,6 +130,8 @@ namespace sgns::ipfs_pubsub
         void Init(std::optional<libp2p::crypto::KeyPair> keyPair);
 
         std::shared_ptr<sgns::ipfs_lite::ipfs::dht::IpfsDHT> dht_;
+        std::shared_ptr<libp2p::protocol::Identify> m_identify;
+        std::shared_ptr<libp2p::protocol::IdentifyMessageProcessor> m_identifymsgproc;
         std::shared_ptr<boost::asio::io_context> m_context;
         std::unique_ptr<boost::asio::io_context::strand> m_strand;
         std::shared_ptr<libp2p::Host> m_host;
