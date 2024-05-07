@@ -21,6 +21,7 @@ target_link_libraries(ipfs-pubsub
     p2p::p2p_basic_host
     p2p::p2p_default_network
     p2p::p2p_peer_repository
+    p2p::p2p_identify
     p2p::p2p_inmem_address_repository
     p2p::p2p_inmem_key_repository
     p2p::p2p_inmem_protocol_repository
@@ -30,4 +31,4 @@ target_link_libraries(ipfs-pubsub
 	p2p::p2p_identify
     ipfs-lite-cpp::ipfs_kad_dht
     spdlog::spdlog
-    )
+)
