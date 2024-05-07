@@ -31,4 +31,5 @@ target_link_libraries(ipfs-pubsub
 	p2p::p2p_autonat
 	p2p::p2p_holepunch_client
     ipfs-lite-cpp::ipfs_kad_dht
+    spdlog::spdlog
 )
