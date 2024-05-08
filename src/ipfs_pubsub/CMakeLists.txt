@@ -27,6 +27,7 @@ target_link_libraries(ipfs-pubsub
     p2p::p2p_gossip
     p2p::asio_scheduler
     p2p::p2p_kademlia
+	p2p::p2p_identify
     ipfs-lite-cpp::ipfs_kad_dht
     spdlog::spdlog
     )
