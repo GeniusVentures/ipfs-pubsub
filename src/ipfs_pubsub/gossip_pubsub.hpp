@@ -123,6 +123,12 @@ namespace sgns::ipfs_pubsub
             std::shared_ptr<boost::asio::io_context> ioc,
             const libp2p::protocol::kademlia::ContentId& key
         );
+        /**
+         * @brief       Add peers to be bootstrapped.
+         * @param[in]   booststrapPeers: Vector of peers 
+         */
+        void AddPeers(const std::vector<std::string>& booststrapPeers);
+        
         const std::shared_ptr<libp2p::Host> GetHost() const;
         const std::shared_ptr<sgns::ipfs_lite::ipfs::dht::IpfsDHT> GetDHT() const;
 
