@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 3.20)
-
+cmake_minimum_required(VERSION 3.22)
+	
 project(ipfs-pubsub VERSION 0.1)
 
 include(GNUInstallDirs)
