@@ -199,7 +199,8 @@ std::future<std::error_code> GossipPubSub::Start(
             return result->get_future();
         }
 
-        // Make peer uri of local node
+
+
         if (bindAddresses.empty()) {
             std::cout << "Using default bind addresses" << std::endl;
             m_localAddress.push_back((boost::format("/ip4/%s/tcp/%d/p2p/%s") % GetLocalIP(*m_context) % listeningPort % m_host->getId().toBase58()).str());
@@ -209,6 +210,7 @@ std::future<std::error_code> GossipPubSub::Start(
             for (const auto& address : bindAddresses)
             {
                 m_localAddress.push_back((boost::format("/ip4/%s/tcp/%d/p2p/%s") % address % listeningPort % m_host->getId().toBase58()).str());
+                
             }
         }
         m_logger->info((boost::format("%s: Starting PubSub service") % m_localAddress[0]).str());
@@ -237,22 +239,23 @@ std::future<std::error_code> GossipPubSub::Start(
         else
         {
             // Start the node as soon as async engine starts
-            m_strand->post([result, peerInfo, this] {
-                bool all_successful = true;
-                for (const auto& address : peerInfo->addresses) {
-                    auto listen_res = m_host->listen(address);
-                    if (!listen_res) {
-                        m_context->stop();
-                        m_logger->error("Cannot listen to multiaddress: {}, details {}", 
-                            address.getStringAddress(), 
-                            listen_res.error().message());
-                        result->set_value(GossipPubSubError::FAILED_LOCAL_ADDRESS_LISTENING);
-                        all_successful = false;
-                        break;
-                    }
-                }
+            m_strand->post([result, peerInfo, this]
+            {
+                auto listen_res = m_host->listen(peerInfo->addresses[0]);
+                if (!listen_res)
+                {
+                    m_context->stop();
+                    m_logger->error("Cannot listen to multiaddress: {}, detais {}", 
+                        peerInfo->addresses[0].getStringAddress(), 
+                        listen_res.error().message());
 
-                if (all_successful) {
+                    result->set_value(GossipPubSubError::FAILED_LOCAL_ADDRESS_LISTENING);
+                }
+                else
+                {
+
+                    // Adding LAN and WAN addresses to the local peer
+                    m_host->getPeerRepository().getAddressRepository().upsertAddresses(peerInfo->id, peerInfo->addresses, libp2p::peer::ttl::kPermanent);
                     m_host->start();
                     m_gossip->start();
                     m_logger->info((boost::format("%s : PubSub service started") % m_localAddress[0]).str());
