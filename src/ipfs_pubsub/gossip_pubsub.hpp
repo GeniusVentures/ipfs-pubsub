@@ -107,22 +107,26 @@ namespace sgns::ipfs_pubsub
 
         /**
          * Find peers with the CID we are looking for using Kademlia DHT.
-         * @param ioc - Asio io context to use
          * @param cid - IPFS Main CID to get from bitswap
          */
         bool StartFindingPeers(
-            std::shared_ptr<boost::asio::io_context> ioc,
             const libp2p::multi::ContentIdentifier& cid
         );
         /**
          * Find peers with the CID we are looking for using Kademlia DHT.
-         * @param ioc - Asio io context to use
          * @param key - IPFS Main CID to get from bitswap
          */
         bool StartFindingPeers(
-            std::shared_ptr<boost::asio::io_context> ioc,
             const libp2p::protocol::kademlia::ContentId& key
         );
+
+        /**
+         * Schedule another find peers.
+         * @param cid - IPFS Main CID to get from bitswap
+         * @param interval - Time until next find occurs
+         */
+        void ScheduleNextFind(const libp2p::multi::ContentIdentifier& cid, std::chrono::seconds interval);
+        void ScheduleNextFind(const libp2p::protocol::kademlia::ContentId& cid, std::chrono::seconds interval);
         /**
          * @brief       Add peers to be bootstrapped.
          * @param[in]   booststrapPeers: Vector of peers 
@@ -144,6 +148,7 @@ namespace sgns::ipfs_pubsub
         std::shared_ptr<libp2p::protocol::gossip::Gossip> m_gossip;
         std::thread m_thread;
         std::vector<std::string> m_localAddress;
+        std::shared_ptr<boost::asio::steady_timer> m_timer;
             //Default Bootstrap Servers
         std::vector<std::string> bootstrapAddresses_ = {
             //"/dnsaddr/bootstrap.libp2p.io/ipfs/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
