@@ -280,7 +280,6 @@ std::future<std::error_code> GossipPubSub::Start(
 
 
     bool GossipPubSub::StartFindingPeers(
-        std::shared_ptr<boost::asio::io_context> ioc,
         const libp2p::multi::ContentIdentifier& cid
     )
     {
@@ -297,18 +296,22 @@ std::future<std::error_code> GossipPubSub::Start(
                 for (auto& provider : providers) {
                     m_gossip->addBootstrapPeer(provider.id, provider.addresses[0]);               
                 }
+                std::chrono::seconds interval(15);
+                ScheduleNextFind(cid, interval);
                 return true;
             }
             else
             {
                 std::cout << "Empty providers list received" << std::endl;
                 //StartFindingPeersWithRetry(ioc, cid, filename, addressoffset, parse, save, handle_read, status);
+                std::chrono::seconds interval(15);
+                ScheduleNextFind(cid, interval);
                 return false;
             }
             });
     }
+
     bool GossipPubSub::StartFindingPeers(
-            std::shared_ptr<boost::asio::io_context> ioc,
             const libp2p::protocol::kademlia::ContentId& key
         )
     {
@@ -331,16 +334,51 @@ std::future<std::error_code> GossipPubSub::Start(
 
                     }
                 }
+                std::chrono::seconds interval(15);
+                ScheduleNextFind(key, interval);
                 return true;
             }
             else
             {
                 std::cout << "Empty providers list received" << std::endl;
                 //StartFindingPeersWithRetry(ioc, cid, filename, addressoffset, parse, save, handle_read, status);
+                std::chrono::seconds interval(15);
+                ScheduleNextFind(key, interval);
                 return false;
             }
             });     
     }
+
+    void GossipPubSub::ScheduleNextFind(const libp2p::multi::ContentIdentifier& cid, std::chrono::seconds interval) {
+        if (!m_timer) {
+            m_timer = std::make_shared<boost::asio::steady_timer>(*m_context);
+        }
+        m_timer->expires_after(interval);
+        m_timer->async_wait([=](const boost::system::error_code& ec) {
+            if (!ec) {
+                StartFindingPeers(cid);
+            } else {
+                std::cerr << "Timer error: " << ec.message() << std::endl;
+            }
+        });
+    }
+
+    void GossipPubSub::ScheduleNextFind(const libp2p::protocol::kademlia::ContentId& cid, std::chrono::seconds interval) {
+        if (!m_timer) {
+            m_timer = std::make_shared<boost::asio::steady_timer>(*m_context);
+        }
+        std::cout << "Schedule Next Find" << std::endl;
+        m_timer->expires_after(interval);
+        m_timer->async_wait([=](const boost::system::error_code& ec) {
+            if (!ec) {
+                std::cout << "Start Next Find" << std::endl;
+                StartFindingPeers(cid);
+            } else {
+                std::cerr << "Timer error: " << ec.message() << std::endl;
+            }
+        });
+    }
+
     void GossipPubSub::AddPeers(const std::vector<std::string>& booststrapPeers)
     {
         for (const auto& remotePeerAddress : booststrapPeers)
