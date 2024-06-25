@@ -5,12 +5,10 @@ add_library(ipfs-pubsub
     gossip_pubsub_topic.hpp
     logger.cpp
     logger.hpp
-    )
+)
 
-message("DIRECTORY FOR IPFS LITE : ${ipfs-lite-cpp_INCLUDE_DIR}")
-
-target_include_directories(ipfs-pubsub 
-    PRIVATE ${GSL_INCLUDE_DIR} ${ipfs-lite-cpp_INCLUDE_DIR}
+target_include_directories(ipfs-pubsub
+    PRIVATE ${GSL_INCLUDE_DIR}
     PUBLIC "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
 )
 
@@ -29,6 +27,6 @@ target_link_libraries(ipfs-pubsub
     p2p::p2p_gossip
     p2p::asio_scheduler
     p2p::p2p_kademlia
-	p2p::p2p_identify
+    p2p::p2p_identify
     ipfs-lite-cpp::ipfs_kad_dht
 )
