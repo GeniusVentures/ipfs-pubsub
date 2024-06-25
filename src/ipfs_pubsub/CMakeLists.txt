@@ -28,8 +28,8 @@ target_link_libraries(ipfs-pubsub
     p2p::asio_scheduler
     p2p::p2p_kademlia
     p2p::p2p_identify
-	p2p::p2p_autonat
-	p2p::p2p_holepunch_client
+    p2p::p2p_autonat
+    p2p::p2p_holepunch_client
     ipfs-lite-cpp::ipfs_kad_dht
     spdlog::spdlog
 )
