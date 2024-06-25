@@ -9,13 +9,11 @@ message("IPFS LITE DIR "${ipfs-lite-cpp_DIR})
 find_package(Protobuf CONFIG REQUIRED)
 
 # libp2p and its dependencies
+find_package(spdlog CONFIG REQUIRED)
 find_package(libp2p CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)
-find_package(spdlog CONFIG REQUIRED)
 find_package(tsl_hat_trie CONFIG REQUIRED)
 find_package(Boost.DI CONFIG REQUIRED)
-#find_package(c-ares CONFIG REQUIRED)
-find_package(fmt CONFIG REQUIRED)
 find_package(soralog CONFIG REQUIRED)
 find_package(ipfs-lite-cpp CONFIG REQUIRED)
 

@@ -15,6 +15,7 @@ target_include_directories(ipfs-pubsub
 )
 
 target_link_libraries(ipfs-pubsub
+    spdlog::spdlog
     OpenSSL::Crypto
     OpenSSL::SSL
     Boost::Boost.DI
@@ -30,5 +31,4 @@ target_link_libraries(ipfs-pubsub
     p2p::p2p_kademlia
 	p2p::p2p_identify
     ipfs-lite-cpp::ipfs_kad_dht
-    spdlog::spdlog
 )
