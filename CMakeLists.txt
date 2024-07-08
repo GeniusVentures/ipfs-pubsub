@@ -23,10 +23,10 @@ find_package(Boost REQUIRED COMPONENTS random filesystem date_time regex)
 add_subdirectory(src)
 
 # Tests building
-find_package(GTest CONFIG REQUIRED)
 option(BUILD_TESTING "Build tests" OFF)
 
 if(BUILD_TESTING)
+    find_package(GTest CONFIG REQUIRED)
     find_package(yaml-cpp CONFIG REQUIRED)
     set_target_properties(yaml-cpp PROPERTIES IMPORTED_GLOBAL TRUE)
     add_library(yaml-cpp::yaml-cpp ALIAS yaml-cpp)
