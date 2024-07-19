@@ -187,7 +187,7 @@ namespace sgns::ipfs_pubsub
 		m_autonatmsgproc = std::make_shared<libp2p::protocol::AutonatMessageProcessor>(
             *m_host, m_host->getNetwork().getConnectionManager(), *injector.create<std::shared_ptr<libp2p::peer::IdentityManager>>(), injector.create<std::shared_ptr<libp2p::crypto::marshaller::KeyMarshaller>>());
 		m_autonat = std::make_shared<libp2p::protocol::Autonat>(*m_host, m_autonatmsgproc, m_host->getBus());  
-		m_autonat->start();
+		//m_autonat->start();
     }
 
 std::future<std::error_code> GossipPubSub::Start(
