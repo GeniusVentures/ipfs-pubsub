@@ -184,9 +184,9 @@ namespace sgns::ipfs_pubsub
             *m_host, m_host->getNetwork().getConnectionManager(), *injector.create<std::shared_ptr<libp2p::peer::IdentityManager>>(), injector.create<std::shared_ptr<libp2p::crypto::marshaller::KeyMarshaller>>());
         m_identify = std::make_shared<libp2p::protocol::Identify>(*m_host, m_identifymsgproc, m_host->getBus());       
         m_identify->start();
-		m_autonatmsgproc = std::make_shared<libp2p::protocol::AutonatMessageProcessor>(
-            *m_host, m_host->getNetwork().getConnectionManager(), *injector.create<std::shared_ptr<libp2p::peer::IdentityManager>>(), injector.create<std::shared_ptr<libp2p::crypto::marshaller::KeyMarshaller>>());
-		m_autonat = std::make_shared<libp2p::protocol::Autonat>(*m_host, m_autonatmsgproc, m_host->getBus());  
+		// m_autonatmsgproc = std::make_shared<libp2p::protocol::AutonatMessageProcessor>(
+        //     *m_host, m_host->getNetwork().getConnectionManager(), *injector.create<std::shared_ptr<libp2p::peer::IdentityManager>>(), injector.create<std::shared_ptr<libp2p::crypto::marshaller::KeyMarshaller>>());
+		// m_autonat = std::make_shared<libp2p::protocol::Autonat>(*m_host, m_autonatmsgproc, m_host->getBus());  
 		//m_autonat->start();
     }
 
@@ -298,7 +298,10 @@ std::future<std::error_code> GossipPubSub::Start(
             if (!providers.empty())
             {
                 for (auto& provider : providers) {
-                    m_gossip->addBootstrapPeer(provider.id, provider.addresses[0]);               
+                    if(provider.id != m_host->getId())
+                    {
+                        m_gossip->addBootstrapPeer(provider.id, provider.addresses[0]);   
+                    }         
                 }
                 std::chrono::seconds interval(15);
                 ScheduleNextFind(cid, interval);
@@ -330,12 +333,15 @@ std::future<std::error_code> GossipPubSub::Start(
             if (!providers.empty())
             {
                 for (auto& provider : providers) {
-                    m_gossip->addBootstrapPeer(provider.id, provider.addresses[0]);    
-                    std::cout << "New Peer: " << provider.id.toBase58() << std::endl;
-                    for(auto& provaddr : provider.addresses)           
+                    if(provider.id != m_host->getId())
                     {
-                        std::cout << provaddr.getStringAddress() << std::endl;
+                        m_gossip->addBootstrapPeer(provider.id, provider.addresses[0]);    
+                        std::cout << "New Peer: " << provider.id.toBase58() << std::endl;
+                        for(auto& provaddr : provider.addresses)           
+                        {
+                            std::cout << provaddr.getStringAddress() << std::endl;
 
+                        }
                     }
                 }
                 std::chrono::seconds interval(15);
