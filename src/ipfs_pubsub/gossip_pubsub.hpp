@@ -74,7 +74,7 @@ namespace sgns::ipfs_pubsub
         * @return future object that indicates if the service is started.
         */
     std::future<std::error_code>
-        Start(int listeningPort, const std::vector<std::string>& booststrapPeers, const std::vector<std::string>& bindAddresses = {});
+        Start(int listeningPort, const std::vector<std::string>& booststrapPeers, const std::string& bindAddresses = "", const std::vector<std::string>& addAddresses = {});
 
         /** Stops the gossip pubsub service.
         */
@@ -93,7 +93,7 @@ namespace sgns::ipfs_pubsub
         /** Returns the current service local address.
         * @return a string representation of the current peer local multi-address
         */
-        const std::vector<std::string>& GetLocalAddress();
+        const std::string& GetLocalAddress();
 
         /** Returns an asio context that is used for gossip protocol handling.
         * @return the asio context
@@ -150,7 +150,8 @@ namespace sgns::ipfs_pubsub
         std::shared_ptr<libp2p::Host> m_host;
         std::shared_ptr<libp2p::protocol::gossip::Gossip> m_gossip;
         std::thread m_thread;
-        std::vector<std::string> m_localAddress;
+        std::string m_localAddress;
+        std::vector<libp2p::multi::Multiaddress> m_localAddressAdditional;
         std::shared_ptr<boost::asio::steady_timer> m_timer;
             //Default Bootstrap Servers
         std::vector<std::string> bootstrapAddresses_ = {
@@ -185,7 +186,7 @@ namespace sgns::ipfs_pubsub
         return (m_context && !m_context->stopped() && m_thread.joinable());
     }
 
-    inline const std::vector<std::string>& GossipPubSub::GetLocalAddress()
+    inline const std::string& GossipPubSub::GetLocalAddress()
     {
         return m_localAddress;
     }

@@ -49,7 +49,7 @@ std::string GetLocalIP(boost::asio::io_context& io)
     return addr;
 }
 
-boost::optional<libp2p::peer::PeerInfo> PeerInfoFromString(const std::vector<std::string>& addresses) {
+boost::optional<libp2p::peer::PeerInfo> PeerInfoFromString(const std::string& addresses) {
     if (addresses.empty()) {
         return boost::none;
     }
@@ -57,8 +57,8 @@ boost::optional<libp2p::peer::PeerInfo> PeerInfoFromString(const std::vector<std
     boost::optional<libp2p::peer::PeerId> peer_id;
     std::vector<libp2p::multi::Multiaddress> multiaddresses;
 
-    for (const auto& addr : addresses) {
-        auto ma_res = libp2p::multi::Multiaddress::create(addr);
+    //for (const auto& addr : addresses) {
+        auto ma_res = libp2p::multi::Multiaddress::create(addresses);
         if (!ma_res) {
             return boost::none;
         }
@@ -75,7 +75,7 @@ boost::optional<libp2p::peer::PeerInfo> PeerInfoFromString(const std::vector<std
                 }
             }
         }
-    }
+    //}
 
     if (!peer_id) {
         return boost::none;
@@ -193,7 +193,8 @@ namespace sgns::ipfs_pubsub
 std::future<std::error_code> GossipPubSub::Start(
     int listeningPort, 
     const std::vector<std::string>& booststrapPeers,
-    const std::vector<std::string>& bindAddresses)
+    const std::string& bindAddresses,
+    const std::vector<std::string>& addAddresses)
 {
         auto result = std::make_shared<std::promise<std::error_code>>();
         if (IsStarted())
@@ -207,23 +208,38 @@ std::future<std::error_code> GossipPubSub::Start(
 
         if (bindAddresses.empty()) {
             std::cout << "Using default bind addresses" << std::endl;
-            m_localAddress.push_back((boost::format("/ip4/%s/tcp/%d/p2p/%s") % GetLocalIP(*m_context) % listeningPort % m_host->getId().toBase58()).str());
+            //m_localAddress.push_back((boost::format("/ip4/%s/tcp/%d/p2p/%s") % GetLocalIP(*m_context) % listeningPort % m_host->getId().toBase58()).str());
+            m_localAddress = (boost::format("/ip4/%s/tcp/%d/p2p/%s") % GetLocalIP(*m_context) % listeningPort % m_host->getId().toBase58()).str();
         } else {
             // Use provided bind addresses
             std::cout << "Using provided bind addresses" << std::endl;
-            for (const auto& address : bindAddresses)
-            {
-                m_localAddress.push_back((boost::format("/ip4/%s/tcp/%d/p2p/%s") % address % listeningPort % m_host->getId().toBase58()).str());
+            // for (const auto& address : bindAddresses)
+            // {
+            //     m_localAddress.push_back((boost::format("/ip4/%s/tcp/%d/p2p/%s") % address % listeningPort % m_host->getId().toBase58()).str());
                 
-            }
+            // }
+            m_localAddress = bindAddresses;
         }
-        m_logger->info((boost::format("%s: Starting PubSub service") % m_localAddress[0]).str());
+
+        if(!addAddresses.empty())
+        {
+            for (const auto& address : addAddresses)
+            {
+                auto ma = libp2p::multi::Multiaddress::create((boost::format("/ip4/%s/tcp/%d/p2p/%s") % address % listeningPort % m_host->getId().toBase58()).str());
+                if(ma)
+                {
+                    m_localAddressAdditional.push_back(ma.value());
+                }
+                
+            }           
+        }
+        m_logger->info((boost::format("%s: Starting PubSub service") % m_localAddress).str());
 
         // Tell gossip to connect to remote peers, only if specified
         for (const auto& remotePeerAddress : booststrapPeers)
         {
-            std::vector<std::string> remoteAddr = {remotePeerAddress};
-            boost::optional<libp2p::peer::PeerInfo> remotePeerInfo = PeerInfoFromString(remoteAddr);
+            //std::vector<std::string> remoteAddr = {remotePeerAddress};
+            boost::optional<libp2p::peer::PeerInfo> remotePeerInfo = PeerInfoFromString(remotePeerAddress);
             if (remotePeerInfo)
             {
                 m_gossip->addBootstrapPeer(remotePeerInfo->id, remotePeerInfo->addresses[0]);
@@ -235,7 +251,7 @@ std::future<std::error_code> GossipPubSub::Start(
         boost::optional<libp2p::peer::PeerInfo> peerInfo = PeerInfoFromString(m_localAddress);
         if (!peerInfo)
         {
-            auto errorMessage = (boost::format("%s: Cannot resolve local peer from the address") % m_localAddress[0]).str();
+            auto errorMessage = (boost::format("%s: Cannot resolve local peer from the address") % m_localAddress).str();
             m_logger->error(errorMessage);
             result->set_value(GossipPubSubError::INVALID_LOCAL_ADDRESS);
             return result->get_future();
@@ -259,10 +275,15 @@ std::future<std::error_code> GossipPubSub::Start(
                 {
 
                     // Adding LAN and WAN addresses to the local peer
-                    m_host->getPeerRepository().getAddressRepository().upsertAddresses(peerInfo->id, peerInfo->addresses, libp2p::peer::ttl::kPermanent);
+                    //m_host->getPeerRepository().getAddressRepository().upsertAddresses(peerInfo->id, peerInfo->addresses, libp2p::peer::ttl::kPermanent);
+                    if(m_localAddressAdditional.size() > 0)
+                    {
+                        m_host->getPeerRepository().getAddressRepository().upsertAddresses(peerInfo->id, m_localAddressAdditional, libp2p::peer::ttl::kPermanent);
+                    }
+                    
                     m_host->start();
                     m_gossip->start();
-                    m_logger->info((boost::format("%s : PubSub service started") % m_localAddress[0]).str());
+                    m_logger->info((boost::format("%s : PubSub service started") % m_localAddress).str());
                     result->set_value(std::error_code());
                 }
             });
@@ -271,7 +292,7 @@ std::future<std::error_code> GossipPubSub::Start(
 
             if (m_context->stopped())
             {
-                auto errorMessage = (boost::format("%s: PubSub service failed to start") % m_localAddress[0]).str();
+                auto errorMessage = (boost::format("%s: PubSub service failed to start") % m_localAddress).str();
                 m_logger->error(errorMessage);
                 if (!result->get_future().valid())
                 {
@@ -393,8 +414,8 @@ std::future<std::error_code> GossipPubSub::Start(
     {
         for (const auto& remotePeerAddress : booststrapPeers)
         {
-            std::vector<std::string> remoteAddr = {remotePeerAddress};
-            boost::optional<libp2p::peer::PeerInfo> remotePeerInfo = PeerInfoFromString(remoteAddr);
+            //std::vector<std::string> remoteAddr = {remotePeerAddress};
+            boost::optional<libp2p::peer::PeerInfo> remotePeerInfo = PeerInfoFromString(remotePeerAddress);
             if (remotePeerInfo)
             {
                 m_gossip->addBootstrapPeer(remotePeerInfo->id, remotePeerInfo->addresses[0]);
