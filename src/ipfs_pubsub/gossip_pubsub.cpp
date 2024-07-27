@@ -354,15 +354,15 @@ std::future<std::error_code> GossipPubSub::Start(
             if (!providers.empty())
             {
                 for (auto& provider : providers) {
+                    std::cout << "New Peer: " << provider.id.toBase58() << std::endl;
+                    for(auto& provaddr : provider.addresses)           
+                    {
+                        std::cout << provaddr.getStringAddress() << std::endl;
+
+                    }
                     if(provider.id != m_host->getId())
                     {
-                        m_gossip->addBootstrapPeer(provider.id, provider.addresses[0]);    
-                        std::cout << "New Peer: " << provider.id.toBase58() << std::endl;
-                        for(auto& provaddr : provider.addresses)           
-                        {
-                            std::cout << provaddr.getStringAddress() << std::endl;
-
-                        }
+                        m_gossip->addBootstrapPeer(provider.id, provider.addresses[0]);
                     }
                 }
                 std::chrono::seconds interval(15);
