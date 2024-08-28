@@ -482,6 +482,7 @@ std::future<std::error_code> GossipPubSub::Start(
         {
             dht_->ProvideCID(cid, true);
         }
+        m_provideCids.clear();
     }
 
     void GossipPubSub::AddPeers(const std::vector<std::string>& booststrapPeers)
