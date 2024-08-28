@@ -129,6 +129,11 @@ namespace sgns::ipfs_pubsub
         void ProvideCID(const libp2p::protocol::kademlia::ContentId& key);
 
         /**
+         * Start sending out CID provides once our addresses are updated.
+         */
+        void StartProvidingCID();
+
+        /**
          * Schedule another find peers.
          * @param cid - IPFS Main CID to get from bitswap
          * @param interval - Time until next find occurs

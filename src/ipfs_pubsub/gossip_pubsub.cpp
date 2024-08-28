@@ -239,7 +239,7 @@ namespace sgns::ipfs_pubsub
         //Make Identify
         m_identifymsgproc = std::make_shared<libp2p::protocol::IdentifyMessageProcessor>(
             *m_host, m_host->getNetwork().getConnectionManager(), *injector.create<std::shared_ptr<libp2p::peer::IdentityManager>>(), injector.create<std::shared_ptr<libp2p::crypto::marshaller::KeyMarshaller>>());
-        m_identify = std::make_shared<libp2p::protocol::Identify>(*m_host, m_identifymsgproc, m_host->getBus());       
+        m_identify = std::make_shared<libp2p::protocol::Identify>(*m_host, m_identifymsgproc, m_host->getBus(), [this]() { this->StartProvidingCID(); });       
         m_identify->start();
 		// m_autonatmsgproc = std::make_shared<libp2p::protocol::AutonatMessageProcessor>(
         //      *m_host, m_host->getNetwork().getConnectionManager(), *injector.create<std::shared_ptr<libp2p::peer::IdentityManager>>(), injector.create<std::shared_ptr<libp2p::crypto::marshaller::KeyMarshaller>>());
@@ -474,6 +474,14 @@ std::future<std::error_code> GossipPubSub::Start(
     void GossipPubSub::ProvideCID(const libp2p::protocol::kademlia::ContentId& key)
     {
         m_provideCids.push_back(key);
+    }
+
+    void GossipPubSub::StartProvidingCID()
+    {
+        for(auto& cid : m_provideCids)
+        {
+            dht_->ProvideCID(cid, true);
+        }
     }
 
     void GossipPubSub::AddPeers(const std::vector<std::string>& booststrapPeers)
