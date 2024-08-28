@@ -123,6 +123,12 @@ namespace sgns::ipfs_pubsub
         );
 
         /**
+         * Service to provide CID as addresses update
+         * @param key - IPFS Main CID to provide
+         */
+        void ProvideCID(const libp2p::protocol::kademlia::ContentId& key);
+
+        /**
          * Schedule another find peers.
          * @param cid - IPFS Main CID to get from bitswap
          * @param interval - Time until next find occurs
@@ -156,6 +162,7 @@ namespace sgns::ipfs_pubsub
         std::string m_localAddress;
         std::vector<libp2p::multi::Multiaddress> m_localAddressAdditional;
         std::shared_ptr<boost::asio::steady_timer> m_timer;
+        std::vector<libp2p::protocol::kademlia::ContentId> m_provideCids;
             //Default Bootstrap Servers
         std::vector<std::string> bootstrapAddresses_ = {
             //"/dnsaddr/bootstrap.libp2p.io/ipfs/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",

@@ -202,6 +202,8 @@ namespace sgns::ipfs_pubsub
 
     void GossipPubSub::Init(std::optional<libp2p::crypto::KeyPair> keyPair)
     {
+        //Init Provid CIDs
+        m_provideCids = std::vector<libp2p::protocol::kademlia::ContentId>();
         // Overriding default config to see local messages as well (echo mode)
         libp2p::protocol::gossip::Config config;
         config.echo_forward_mode = true;
@@ -467,6 +469,11 @@ std::future<std::error_code> GossipPubSub::Start(
                 std::cerr << "Timer error: " << ec.message() << std::endl;
             }
         });
+    }
+
+    void GossipPubSub::ProvideCID(const libp2p::protocol::kademlia::ContentId& key)
+    {
+        m_provideCids.push_back(key);
     }
 
     void GossipPubSub::AddPeers(const std::vector<std::string>& booststrapPeers)
