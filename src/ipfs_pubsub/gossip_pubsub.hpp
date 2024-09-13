@@ -19,6 +19,7 @@
 #include <libp2p/protocol/identify/identify.hpp>
 #include <libp2p/protocol/autonat/autonat.hpp>
 #include <libp2p/protocol/holepunch/holepunch.hpp>
+#include <libp2p/transport/upgrader.hpp>
 
 namespace sgns::ipfs_pubsub
 {
