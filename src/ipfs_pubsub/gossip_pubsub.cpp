@@ -236,6 +236,10 @@ namespace sgns::ipfs_pubsub
                 //Initialize DHT
         dht_ = std::make_shared<sgns::ipfs_lite::ipfs::dht::IpfsDHT>(kademlia, bootstrapAddresses_,m_context);
 
+        //Make Holepunch Client
+        m_holepunchmsgproc = std::make_shared<libp2p::protocol::HolepunchClientMsgProc>(*m_host, m_host->getNetwork().getConnectionManager());
+        m_holepunch = std::make_shared<libp2p::protocol::HolepunchClient>(*m_host, m_holepunchmsgproc, m_host->getBus());
+        m_holepunch->start();
         //Make Identify
         m_identifymsgproc = std::make_shared<libp2p::protocol::IdentifyMessageProcessor>(
             *m_host, m_host->getNetwork().getConnectionManager(), *injector.create<std::shared_ptr<libp2p::peer::IdentityManager>>(), injector.create<std::shared_ptr<libp2p::crypto::marshaller::KeyMarshaller>>());
