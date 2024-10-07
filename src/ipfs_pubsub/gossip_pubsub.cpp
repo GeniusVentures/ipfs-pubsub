@@ -147,8 +147,9 @@ auto makeCustomHostInjector(std::optional<libp2p::crypto::KeyPair> keyPair, Ts &
 
     libp2p::protocol::kademlia::Config kademlia_config;
     kademlia_config.randomWalk.enabled = true;
-    kademlia_config.randomWalk.interval = std::chrono::seconds(300);
-    kademlia_config.requestConcurency = 20;
+    kademlia_config.randomWalk.interval = std::chrono::seconds(30);
+    kademlia_config.requestConcurency = 3;
+    kademlia_config.maxProvidersPerKey = 300;
 
     auto csprng = std::make_shared<crypto::random::BoostRandomGenerator>();
     auto ed25519_provider = std::make_shared<crypto::ed25519::Ed25519ProviderImpl>();
