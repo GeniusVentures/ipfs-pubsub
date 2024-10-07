@@ -390,7 +390,7 @@ std::future<std::error_code> GossipPubSub::Start(
                         m_gossip->addBootstrapPeer(provider.id, provider.addresses[0]);   
                     }         
                 }
-                std::chrono::seconds interval(15);
+                std::chrono::seconds interval(120);
                 ScheduleNextFind(cid, interval);
                 return true;
             }
@@ -398,7 +398,7 @@ std::future<std::error_code> GossipPubSub::Start(
             {
                 std::cout << "Empty providers list received" << std::endl;
                 //StartFindingPeersWithRetry(ioc, cid, filename, addressoffset, parse, save, handle_read, status);
-                std::chrono::seconds interval(15);
+                std::chrono::seconds interval(120);
                 ScheduleNextFind(cid, interval);
                 return false;
             }
@@ -431,7 +431,7 @@ std::future<std::error_code> GossipPubSub::Start(
                         m_gossip->addBootstrapPeer(provider.id, provider.addresses[0]);
                     }
                 }
-                std::chrono::seconds interval(15);
+                std::chrono::seconds interval(120);
                 ScheduleNextFind(key, interval);
                 return true;
             }
@@ -439,7 +439,7 @@ std::future<std::error_code> GossipPubSub::Start(
             {
                 std::cout << "Empty providers list received" << std::endl;
                 //StartFindingPeersWithRetry(ioc, cid, filename, addressoffset, parse, save, handle_read, status);
-                std::chrono::seconds interval(15);
+                std::chrono::seconds interval(120);
                 ScheduleNextFind(key, interval);
                 return false;
             }
