@@ -447,7 +447,6 @@ std::future<std::error_code> GossipPubSub::Start(
     }
 
     void GossipPubSub::ScheduleNextFind(const libp2p::multi::ContentIdentifier& cid, std::chrono::seconds interval) {
-        return;
         if (!m_timer) {
             m_timer = std::make_shared<boost::asio::steady_timer>(*m_context);
         }
@@ -462,7 +461,6 @@ std::future<std::error_code> GossipPubSub::Start(
     }
 
     void GossipPubSub::ScheduleNextFind(const libp2p::protocol::kademlia::ContentId& cid, std::chrono::seconds interval) {
-        return;
         if (!m_timer) {
             m_timer = std::make_shared<boost::asio::steady_timer>(*m_context);
         }
