@@ -17,6 +17,10 @@
 #include "ipfs_lite/dht/kademlia_dht.hpp"
 #include "libp2p/injector/kademlia_injector.hpp"
 #include <libp2p/protocol/identify/identify.hpp>
+#include <libp2p/protocol/autonat/autonat.hpp>
+#include <libp2p/protocol/holepunch/holepunch_server.hpp>
+#include <libp2p/protocol/holepunch/holepunch_client.hpp>
+#include <libp2p/transport/upgrader.hpp>
 
 namespace sgns::ipfs_pubsub
 {
@@ -73,7 +77,7 @@ namespace sgns::ipfs_pubsub
         * @return future object that indicates if the service is started.
         */
     std::future<std::error_code>
-        Start(int listeningPort, const std::vector<std::string>& booststrapPeers, const std::vector<std::string>& bindAddresses = {});
+        Start(int listeningPort, const std::vector<std::string>& booststrapPeers, const std::string& bindAddresses = "", const std::vector<std::string>& addAddresses = {});
 
         /** Stops the gossip pubsub service.
         */
@@ -92,7 +96,7 @@ namespace sgns::ipfs_pubsub
         /** Returns the current service local address.
         * @return a string representation of the current peer local multi-address
         */
-        const std::vector<std::string>& GetLocalAddress();
+        const std::string& GetLocalAddress();
 
         /** Returns an asio context that is used for gossip protocol handling.
         * @return the asio context
@@ -121,6 +125,17 @@ namespace sgns::ipfs_pubsub
         );
 
         /**
+         * Service to provide CID as addresses update
+         * @param key - IPFS Main CID to provide
+         */
+        void ProvideCID(const libp2p::protocol::kademlia::ContentId& key);
+
+        /**
+         * Start sending out CID provides once our addresses are updated.
+         */
+        void StartProvidingCID();
+
+        /**
          * Schedule another find peers.
          * @param cid - IPFS Main CID to get from bitswap
          * @param interval - Time until next find occurs
@@ -142,13 +157,19 @@ namespace sgns::ipfs_pubsub
         std::shared_ptr<sgns::ipfs_lite::ipfs::dht::IpfsDHT> dht_;
         std::shared_ptr<libp2p::protocol::Identify> m_identify;
         std::shared_ptr<libp2p::protocol::IdentifyMessageProcessor> m_identifymsgproc;
+		// std::shared_ptr<libp2p::protocol::Autonat> m_autonat;
+        // std::shared_ptr<libp2p::protocol::AutonatMessageProcessor> m_autonatmsgproc;
+        std::shared_ptr<libp2p::protocol::HolepunchClient> m_holepunch;
+        std::shared_ptr<libp2p::protocol::HolepunchClientMsgProc> m_holepunchmsgproc;
         std::shared_ptr<boost::asio::io_context> m_context;
         std::unique_ptr<boost::asio::io_context::strand> m_strand;
         std::shared_ptr<libp2p::Host> m_host;
         std::shared_ptr<libp2p::protocol::gossip::Gossip> m_gossip;
         std::thread m_thread;
-        std::vector<std::string> m_localAddress;
+        std::string m_localAddress;
+        std::vector<libp2p::multi::Multiaddress> m_localAddressAdditional;
         std::shared_ptr<boost::asio::steady_timer> m_timer;
+        std::vector<libp2p::protocol::kademlia::ContentId> m_provideCids;
             //Default Bootstrap Servers
         std::vector<std::string> bootstrapAddresses_ = {
             //"/dnsaddr/bootstrap.libp2p.io/ipfs/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
@@ -182,7 +203,7 @@ namespace sgns::ipfs_pubsub
         return (m_context && !m_context->stopped() && m_thread.joinable());
     }
 
-    inline const std::vector<std::string>& GossipPubSub::GetLocalAddress()
+    inline const std::string& GossipPubSub::GetLocalAddress()
     {
         return m_localAddress;
     }
