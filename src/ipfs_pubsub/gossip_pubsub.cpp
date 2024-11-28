@@ -287,17 +287,15 @@ std::future<std::error_code> GossipPubSub::Start(
             m_localAddress = bindAddresses;
         }
 
-        if(!addAddresses.empty())
+        for ( const auto &address : addAddresses )
         {
-            for (const auto& address : addAddresses)
+            auto ma = libp2p::multi::Multiaddress::create(
+                ( boost::format( "/ip4/%s/tcp/%d/p2p/%s" ) % address % listeningPort % m_host->getId().toBase58() )
+                    .str() );
+            if ( ma )
             {
-                auto ma = libp2p::multi::Multiaddress::create((boost::format("/ip4/%s/tcp/%d/p2p/%s") % address % listeningPort % m_host->getId().toBase58()).str());
-                if(ma)
-                {
-                    m_localAddressAdditional.push_back(ma.value());
-                }
-                
-            }           
+                m_localAddressAdditional.push_back( ma.value() );
+            }
         }
         m_logger->info((boost::format("%s: Starting PubSub service") % m_localAddress).str());
 
