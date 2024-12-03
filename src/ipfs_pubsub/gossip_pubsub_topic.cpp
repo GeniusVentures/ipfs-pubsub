@@ -4,27 +4,24 @@ namespace
 {
 std::vector<uint8_t> StringToArray(const std::string& s)
 {
-    std::vector<uint8_t> data;
     auto sz = s.size();
-    if (sz > 0)
-    {
-        data.reserve(sz);
-        data.assign(s.begin(), s.end());
-    }
+
+    std::vector<uint8_t> data;
+    data.reserve( sz );
+    data.assign( s.begin(), s.end() );
+
     return data;
 }
 }
 
 namespace sgns::ipfs_pubsub
 {
-    GossipPubSubTopic::GossipPubSubTopic(
-        std::shared_ptr<GossipPubSub> gossipPubSub, std::string topic)
-        : m_gossipPubSub(gossipPubSub)
-        , m_topic(topic)
+    GossipPubSubTopic::GossipPubSubTopic( std::shared_ptr<GossipPubSub> gossipPubSub, std::string_view topic ) :
+        m_gossipPubSub( std::move( gossipPubSub ) ), m_topic( topic )
     {
     }
 
-    void GossipPubSubTopic::Subscribe(MessageCallback onMessageCallback)
+    void GossipPubSubTopic::Subscribe( SubscriptionCallback onMessageCallback )
     {
         m_subscription = m_gossipPubSub->Subscribe(m_topic, onMessageCallback);
         m_subscription.wait();
@@ -32,7 +29,7 @@ namespace sgns::ipfs_pubsub
 
     void GossipPubSubTopic::Publish(const std::string & message)
     {
-        m_gossipPubSub->Publish(m_topic, StringToArray(message));
+        Publish( StringToArray( message ) );
     }
 
     void GossipPubSubTopic::Publish(const std::vector<uint8_t>& message)
