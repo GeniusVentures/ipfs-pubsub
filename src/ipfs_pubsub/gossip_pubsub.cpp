@@ -272,20 +272,20 @@ std::future<std::error_code> GossipPubSub::Start(
 
 
 
-        if (bindAddresses.empty()) {
+        //if (bindAddresses.empty()) {
             std::cout << "Using default bind addresses" << std::endl;
             //m_localAddress.push_back((boost::format("/ip4/%s/tcp/%d/p2p/%s") % GetLocalIP(*m_context) % listeningPort % m_host->getId().toBase58()).str());
             m_localAddress = (boost::format("/ip4/%s/tcp/%d/p2p/%s") % GetLocalIP(*m_context) % listeningPort % m_host->getId().toBase58()).str();
-        } else {
+        //} else {
             // Use provided bind addresses
-            std::cout << "Using provided bind addresses" << std::endl;
+          //  std::cout << "Using provided bind addresses" << std::endl;
             // for (const auto& address : bindAddresses)
             // {
             //     m_localAddress.push_back((boost::format("/ip4/%s/tcp/%d/p2p/%s") % address % listeningPort % m_host->getId().toBase58()).str());
                 
             // }
-            m_localAddress = bindAddresses;
-        }
+          //  m_localAddress = bindAddresses;
+        //}
 
         for ( const auto &address : addAddresses )
         {
