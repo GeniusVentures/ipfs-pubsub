@@ -109,28 +109,24 @@ boost::optional<libp2p::peer::PeerInfo> PeerInfoFromString(const std::string& ad
         return boost::none;
     }
 
-    boost::optional<libp2p::peer::PeerId> peer_id;
     std::vector<libp2p::multi::Multiaddress> multiaddresses;
 
-    //for (const auto& addr : addresses) {
-        auto ma_res = libp2p::multi::Multiaddress::create(addresses);
-        if (!ma_res) {
-            return boost::none;
-        }
+    auto ma_res = libp2p::multi::Multiaddress::create(addresses);
+    if (!ma_res) {
+        return boost::none;
+    }
 
-        auto ma = std::move(ma_res.value());
-        multiaddresses.push_back(ma);
+    auto ma = std::move(ma_res.value());
+    multiaddresses.push_back(ma);
 
-        if (!peer_id) {
-            auto peer_id_str = ma.getPeerId();
-            if (peer_id_str) {
-                auto peer_id_res = libp2p::peer::PeerId::fromBase58(*peer_id_str);
-                if (peer_id_res) {
-                    peer_id = peer_id_res.value();
-                }
-            }
+    boost::optional<libp2p::peer::PeerId> peer_id;
+    auto peer_id_str = ma.getPeerId();
+    if (peer_id_str) {
+        auto peer_id_res = libp2p::peer::PeerId::fromBase58(*peer_id_str);
+        if (peer_id_res) {
+            peer_id = peer_id_res.value();
         }
-    //}
+    }
 
     if (!peer_id) {
         return boost::none;
@@ -302,14 +298,12 @@ std::future<std::error_code> GossipPubSub::Start(
         // Tell gossip to connect to remote peers, only if specified
         for (const auto& remotePeerAddress : booststrapPeers)
         {
-            //std::vector<std::string> remoteAddr = {remotePeerAddress};
             boost::optional<libp2p::peer::PeerInfo> remotePeerInfo = PeerInfoFromString(remotePeerAddress);
             if (remotePeerInfo)
             {
                 m_gossip->addBootstrapPeer(remotePeerInfo->id, remotePeerInfo->addresses[0]);
             }
         }
-
 
         // Local address -> peer info
         boost::optional<libp2p::peer::PeerInfo> peerInfo = PeerInfoFromString(m_localAddress);
