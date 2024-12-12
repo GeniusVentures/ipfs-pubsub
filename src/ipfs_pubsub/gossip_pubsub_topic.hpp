@@ -21,7 +21,7 @@ public:
     * gossipPubSub - pubsub service
     * @param topic - a topic id
     */
-    GossipPubSubTopic( std::shared_ptr<GossipPubSub> gossipPubSub, std::string_view topic );
+    GossipPubSubTopic( std::shared_ptr<GossipPubSub> gossipPubSub, std::string topic );
 
     /** Subscribes the object to specified topic.
     * @param onMessageCallback - callback which is invoked when the topic messages are received

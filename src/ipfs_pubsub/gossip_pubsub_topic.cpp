@@ -16,7 +16,7 @@ std::vector<uint8_t> StringToArray(const std::string& s)
 
 namespace sgns::ipfs_pubsub
 {
-    GossipPubSubTopic::GossipPubSubTopic( std::shared_ptr<GossipPubSub> gossipPubSub, std::string_view topic ) :
+    GossipPubSubTopic::GossipPubSubTopic( std::shared_ptr<GossipPubSub> gossipPubSub, std::string topic ) :
         m_gossipPubSub( std::move( gossipPubSub ) ), m_topic( topic )
     {
     }
