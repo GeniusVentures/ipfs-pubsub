@@ -10,12 +10,10 @@
 #include <boost/asio/io_context.hpp>
 
 #include <libp2p/peer/peer_info.hpp>
-#include <libp2p/host/host.hpp>
 #include <libp2p/protocol/gossip/gossip.hpp>
 #include <libp2p/outcome/outcome.hpp>
 #include <optional>
 #include "ipfs_lite/dht/kademlia_dht.hpp"
-#include "libp2p/injector/kademlia_injector.hpp"
 #include <libp2p/protocol/identify/identify.hpp>
 #include <libp2p/protocol/autonat/autonat.hpp>
 #include <libp2p/protocol/holepunch/holepunch_server.hpp>

@@ -3,6 +3,7 @@
 #include <iostream>
 #include <boost/format.hpp>
 #include <libp2p/injector/host_injector.hpp>
+#include <libp2p/injector/kademlia_injector.hpp>
 
 #include <boost/di/extension/scopes/shared.hpp>
 #if defined(_WIN32)
