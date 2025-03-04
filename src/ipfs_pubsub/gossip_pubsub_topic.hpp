@@ -25,9 +25,10 @@ public:
 
     /** Subscribes the object to specified topic.
     * @param onMessageCallback - callback which is invoked when the topic messages are received
+    * @param subscribeNow - wait for the subscription to become active
     * @return subscription handler.
     */
-    void Subscribe( SubscriptionCallback onMessageCallback );
+    void Subscribe( SubscriptionCallback onMessageCallback, bool subscribeNow = false );
 
     /** Cancels subscription.
     */
