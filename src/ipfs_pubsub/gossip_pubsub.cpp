@@ -144,9 +144,10 @@ auto makeCustomHostInjector(std::optional<libp2p::crypto::KeyPair> keyPair, Ts &
 
     libp2p::protocol::kademlia::Config kademlia_config;
     kademlia_config.randomWalk.enabled = true;
-    kademlia_config.randomWalk.interval = std::chrono::seconds(30);
+    kademlia_config.randomWalk.interval = std::chrono::minutes(5);
     kademlia_config.requestConcurency = 3;
     kademlia_config.maxProvidersPerKey = 300;
+    kademlia_config.maxBucketSize = 5;
 
     auto csprng = std::make_shared<crypto::random::BoostRandomGenerator>();
     auto ed25519_provider = std::make_shared<crypto::ed25519::Ed25519ProviderImpl>();
@@ -204,8 +205,9 @@ namespace sgns::ipfs_pubsub
         m_provideCids = std::vector<libp2p::protocol::kademlia::ContentId>();
         // Overriding default config to see local messages as well (echo mode)
         libp2p::protocol::gossip::Config config;
-        config.echo_forward_mode = true;
+        config.echo_forward_mode = false;
         config.sign_messages = true;
+        config.seen_cache_limit = 10;
         // Objects creating
 
         // Injector creates and ties dependent objects
