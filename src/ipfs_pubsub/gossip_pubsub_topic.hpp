@@ -28,7 +28,7 @@ public:
     * @param subscribeNow - wait for the subscription to become active
     * @return subscription handler.
     */
-    void Subscribe( SubscriptionCallback onMessageCallback, bool subscribeNow = false );
+    std::future<Subscription> &Subscribe( SubscriptionCallback onMessageCallback, bool subscribeNow = false );
 
     /** Cancels subscription.
     */

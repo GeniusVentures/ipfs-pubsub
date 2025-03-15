@@ -21,13 +21,14 @@ namespace sgns::ipfs_pubsub
     {
     }
 
-    void GossipPubSubTopic::Subscribe( SubscriptionCallback onMessageCallback, bool subscribeNow )
+    std::future<GossipPubSubTopic::Subscription> &GossipPubSubTopic::Subscribe( SubscriptionCallback onMessageCallback, bool subscribeNow )
     {
         m_subscription = m_gossipPubSub->Subscribe(m_topic, onMessageCallback);
         if (subscribeNow)
         {
             m_subscription.wait();
         }
+        return m_subscription;
     }
 
     void GossipPubSubTopic::Publish(const std::string & message)
