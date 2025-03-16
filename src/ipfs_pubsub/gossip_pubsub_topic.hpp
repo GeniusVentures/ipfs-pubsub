@@ -56,6 +56,15 @@ public:
     {
         return m_gossipPubSub;
     }
+    /**
+     * Get Peers in a topic
+     */
+    size_t getPeerCount() const;
+
+    /**
+     * Get PeerIds in a topic
+     */
+    std::vector<libp2p::peer::PeerId> getAllPeers() const;
 
 private:
     std::shared_ptr<GossipPubSub> m_gossipPubSub;

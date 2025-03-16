@@ -45,4 +45,15 @@ namespace sgns::ipfs_pubsub
     {
         m_subscription.get().cancel();
     }
+    size_t GossipPubSubTopic::getPeerCount() const
+    {
+        std::string topic_copy = m_topic;
+        return m_gossipPubSub->getPeerCount(topic_copy);
+    }
+
+    std::vector<libp2p::peer::PeerId> GossipPubSubTopic::getAllPeers() const
+    {
+        std::string topic_copy = m_topic;
+        return m_gossipPubSub->getAllPeers(topic_copy);
+    }
 }
