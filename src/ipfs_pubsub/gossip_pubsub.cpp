@@ -498,6 +498,17 @@ std::future<std::error_code> GossipPubSub::Start(
         }
     }
 
+    size_t GossipPubSub::getPeerCount(std::string& topic) const
+    {
+        return m_gossip->getPeerCount(topic);
+    }
+
+
+    std::vector<libp2p::peer::PeerId> GossipPubSub::getAllPeers(std::string& topic) const
+    {
+        return m_gossip->getAllPeers(topic);
+    }
+
     GossipPubSub::~GossipPubSub()
     {
         Stop();

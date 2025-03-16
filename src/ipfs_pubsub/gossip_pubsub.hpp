@@ -149,6 +149,18 @@ namespace sgns::ipfs_pubsub
         const std::shared_ptr<libp2p::Host> GetHost() const;
         const std::shared_ptr<sgns::ipfs_lite::ipfs::dht::IpfsDHT> GetDHT() const;
 
+        /**
+         * Get Peers in a topic
+         * @param topic - String of topic name
+         */
+        size_t getPeerCount(std::string& topic) const;
+
+        /**
+         * Get PeerIds in a topic
+         * @param topic - String of topic name
+         */
+        std::vector<libp2p::peer::PeerId> getAllPeers(std::string& topic) const;
+
     private:
         void Init(std::optional<libp2p::crypto::KeyPair> keyPair);
 
