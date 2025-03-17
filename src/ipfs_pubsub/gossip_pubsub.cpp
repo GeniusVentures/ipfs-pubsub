@@ -520,9 +520,10 @@ std::future<std::error_code> GossipPubSub::Start(
         {
             if (!m_context->stopped())
             {
+                m_context->stop();
                 m_gossip->stop();
                 m_host->stop();
-                m_context->stop();
+                
             }
         };
 
