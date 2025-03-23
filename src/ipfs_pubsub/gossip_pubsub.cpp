@@ -208,6 +208,7 @@ namespace sgns::ipfs_pubsub
         config.echo_forward_mode = false;
         config.sign_messages = true;
         config.seen_cache_limit = 10;
+        config.heartbeat_interval_msec = std::chrono::milliseconds{100};
         // Objects creating
 
         // Injector creates and ties dependent objects
