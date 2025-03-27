@@ -554,7 +554,10 @@ std::future<std::error_code> GossipPubSub::Start(
                 m_context->stop();
                 m_gossip->stop();
                 m_host->stop();
-                
+                if (m_timer)
+                {
+                    m_timer->cancel();
+                }
             }
         };
 
