@@ -43,7 +43,10 @@ namespace sgns::ipfs_pubsub
 
     void GossipPubSubTopic::Unsubscribe()
     {
-        m_subscription.get().cancel();
+        if (m_subscription.valid())
+        {
+	        m_subscription.get().cancel();
+        }
     }
     size_t GossipPubSubTopic::getPeerCount() const
     {
