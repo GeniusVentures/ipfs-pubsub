@@ -40,100 +40,103 @@ std::string ToString(const std::vector<uint8_t>& buf)
     return std::string(reinterpret_cast<const char*>(buf.data()), buf.size());
 }
 
-std::string GetLocalIP( boost::asio::io_context &io )
-    {
-#if defined( _WIN32 )
-        // Windows implementation using GetAdaptersAddresses
-        ULONG                 bufferSize       = 15000;
-        IP_ADAPTER_ADDRESSES *adapterAddresses = (IP_ADAPTER_ADDRESSES *)malloc( bufferSize );
-        if ( GetAdaptersAddresses( AF_INET, 0, nullptr, adapterAddresses, &bufferSize ) == ERROR_BUFFER_OVERFLOW )
-        {
-            free( adapterAddresses );
-            adapterAddresses = (IP_ADAPTER_ADDRESSES *)malloc( bufferSize );
-        }
-        std::string addr = "127.0.0.1"; // Default to localhost
-        if ( GetAdaptersAddresses( AF_INET, 0, nullptr, adapterAddresses, &bufferSize ) == NO_ERROR )
-        {
-            for ( IP_ADAPTER_ADDRESSES *adapter = adapterAddresses; adapter; adapter = adapter->Next )
-            {
-                if ( adapter->OperStatus == IfOperStatusUp && adapter->IfType != IF_TYPE_SOFTWARE_LOOPBACK )
-                {
-                    for ( IP_ADAPTER_UNICAST_ADDRESS *unicast = adapter->FirstUnicastAddress; unicast;
-                          unicast                             = unicast->Next )
-                    {
-                        SOCKADDR *addrStruct = unicast->Address.lpSockaddr;
-                        if ( addrStruct->sa_family == AF_INET )
-                        { // For IPv4
-                            char buffer[INET_ADDRSTRLEN];
-                            inet_ntop( AF_INET,
-                                       &( ( (struct sockaddr_in *)addrStruct )->sin_addr ),
-                                       buffer,
-                                       INET_ADDRSTRLEN );
+// Helper function to check if an IP address should be filtered out
+bool ShouldFilterIP(const std::string& ip) {
+    struct sockaddr_in sa;
+    int result = inet_pton(AF_INET, ip.c_str(), &(sa.sin_addr));
+    if (result != 1) return false;
+    
+    uint32_t addr = ntohl(sa.sin_addr.s_addr);
+    
+    // Filter out problematic ranges:
+    // 172.16.0.0/12     (172.16.0.0 to 172.31.255.255) - Docker/container networks
+    // 169.254.0.0/16    (169.254.0.0 to 169.254.255.255) - APIPA/Link-local
+    // 127.0.0.0/8       (127.0.0.0 to 127.255.255.255) - Loopback
+    // 
+    // Keep these ranges (don't filter):
+    // 10.0.0.0/8        (10.0.0.0 to 10.255.255.255) - Common LAN
+    // 192.168.0.0/16    (192.168.0.0 to 192.168.255.255) - Common LAN
+    
+    return ((addr & 0xFFF00000) == 0xAC100000) ||        // 172.16.0.0/12
+           ((addr & 0xFFFF0000) == 0xA9FE0000) ||        // 169.254.0.0/16
+           ((addr & 0xFF000000) == 0x7F000000);          // 127.0.0.0/8
+}
 
-                            // Skip APIPA/link-local addresses (169.254.x.x)
-                            if ( strncmp( buffer, "169.254.", 8 ) == 0 )
-                            {
-                                continue;
-                            }
-
+std::string GetLocalIP(boost::asio::io_context &io) {
+#if defined(_WIN32)
+    // Windows implementation using GetAdaptersAddresses
+    ULONG bufferSize = 15000;
+    IP_ADAPTER_ADDRESSES *adapterAddresses = (IP_ADAPTER_ADDRESSES *)malloc(bufferSize);
+    if (GetAdaptersAddresses(AF_INET, 0, nullptr, adapterAddresses, &bufferSize) == ERROR_BUFFER_OVERFLOW) {
+        free(adapterAddresses);
+        adapterAddresses = (IP_ADAPTER_ADDRESSES *)malloc(bufferSize);
+    }
+    std::string addr = "127.0.0.1"; // Default to localhost
+    if (GetAdaptersAddresses(AF_INET, 0, nullptr, adapterAddresses, &bufferSize) == NO_ERROR) {
+        for (IP_ADAPTER_ADDRESSES *adapter = adapterAddresses; adapter; adapter = adapter->Next) {
+            if (adapter->OperStatus == IfOperStatusUp && adapter->IfType != IF_TYPE_SOFTWARE_LOOPBACK) {
+                for (IP_ADAPTER_UNICAST_ADDRESS *unicast = adapter->FirstUnicastAddress; unicast;
+                     unicast = unicast->Next) {
+                    SOCKADDR *addrStruct = unicast->Address.lpSockaddr;
+                    if (addrStruct->sa_family == AF_INET) { // For IPv4
+                        char buffer[INET_ADDRSTRLEN];
+                        inet_ntop(AF_INET,
+                                 &(((struct sockaddr_in *)addrStruct)->sin_addr),
+                                 buffer,
+                                 INET_ADDRSTRLEN);
+                        
+                        // Skip problematic IP addresses
+                        if (!ShouldFilterIP(buffer)) {
                             addr = buffer;
                             break;
                         }
                     }
                 }
-                if ( addr != "127.0.0.1" )
-                {
-                    break; // Stop if we found a non-loopback IP
-                }
+            }
+            if (addr != "127.0.0.1") {
+                break; // Stop if we found a non-loopback IP
             }
         }
-        free( adapterAddresses );
-        return addr;
+    }
+    free(adapterAddresses);
+    return addr;
 #else
-        // Unix-like implementation using getifaddrs
-        struct ifaddrs *ifaddr, *ifa;
-        int             family;
-        std::string     addr = "127.0.0.1"; // Default to localhost
-        if ( getifaddrs( &ifaddr ) == -1 )
-        {
-            perror( "getifaddrs" );
-            return addr;
+    // Unix-like implementation using getifaddrs
+    struct ifaddrs *ifaddr, *ifa;
+    int family;
+    std::string addr = "127.0.0.1"; // Default to localhost
+    if (getifaddrs(&ifaddr) == -1) {
+        perror("getifaddrs");
+        return addr;
+    }
+    for (ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == nullptr) {
+            continue;
         }
-        for ( ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next )
-        {
-            if ( ifa->ifa_addr == nullptr )
-            {
-                continue;
-            }
-            family = ifa->ifa_addr->sa_family;
-            // We only want IPv4 addresses
-            if ( family == AF_INET && !( ifa->ifa_flags & IFF_LOOPBACK ) )
-            {
-                char host[NI_MAXHOST];
-                int  s = getnameinfo( ifa->ifa_addr,
-                                     sizeof( struct sockaddr_in ),
-                                     host,
-                                     NI_MAXHOST,
-                                     nullptr,
-                                     0,
-                                     NI_NUMERICHOST );
-                if ( s == 0 )
-                {
-                    // Skip APIPA/link-local addresses (169.254.x.x)
-                    if ( strncmp( host, "169.254.", 8 ) == 0 )
-                    {
-                        continue;
-                    }
-
+        family = ifa->ifa_addr->sa_family;
+        // We only want IPv4 addresses
+        if (family == AF_INET && !(ifa->ifa_flags & IFF_LOOPBACK)) {
+            char host[NI_MAXHOST];
+            int s = getnameinfo(ifa->ifa_addr,
+                               sizeof(struct sockaddr_in),
+                               host,
+                               NI_MAXHOST,
+                               nullptr,
+                               0,
+                               NI_NUMERICHOST);
+            if (s == 0) {
+                // Skip problematic IP addresses
+                if (!ShouldFilterIP(host)) {
                     addr = host;
                     break;
                 }
             }
         }
-        freeifaddrs( ifaddr );
-        return addr;
-#endif
     }
+    freeifaddrs(ifaddr);
+    return addr;
+#endif
+}
 
 boost::optional<libp2p::peer::PeerInfo> PeerInfoFromString(const std::string& addresses) {
     if (addresses.empty()) {
