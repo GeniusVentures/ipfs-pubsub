@@ -40,26 +40,43 @@ std::string ToString(const std::vector<uint8_t>& buf)
     return std::string(reinterpret_cast<const char*>(buf.data()), buf.size());
 }
 
-// Helper function to check if an IP address should be filtered out
-bool ShouldFilterIP(const std::string& ip) {
+// Helper function to get IP priority (lower number = higher priority)
+int GetIPPriority(const std::string& ip) {
     struct sockaddr_in sa;
     int result = inet_pton(AF_INET, ip.c_str(), &(sa.sin_addr));
-    if (result != 1) return false;
+    if (result != 1) return 999; // Invalid IP gets lowest priority
     
     uint32_t addr = ntohl(sa.sin_addr.s_addr);
     
-    // Filter out problematic ranges:
-    // 172.16.0.0/12     (172.16.0.0 to 172.31.255.255) - Docker/container networks
-    // 169.254.0.0/16    (169.254.0.0 to 169.254.255.255) - APIPA/Link-local
-    // 127.0.0.0/8       (127.0.0.0 to 127.255.255.255) - Loopback
-    // 
-    // Keep these ranges (don't filter):
-    // 10.0.0.0/8        (10.0.0.0 to 10.255.255.255) - Common LAN
-    // 192.168.0.0/16    (192.168.0.0 to 192.168.255.255) - Common LAN
+    // Priority levels (lower number = higher priority):
+    // 0 = Public IP addresses (highest priority)
+    // 1 = 10.x.x.x (preferred private range)
+    // 2 = 192.168.x.x (preferred private range) 
+    // 3 = 172.16-31.x.x (acceptable but lower priority)
+    // 4 = 100.64-127.x.x (CGNAT - shared address space, lower priority)
+    // 999 = Should be filtered out (loopback, APIPA)
     
-    return ((addr & 0xFFF00000) == 0xAC100000) ||        // 172.16.0.0/12
-           ((addr & 0xFFFF0000) == 0xA9FE0000) ||        // 169.254.0.0/16
-           ((addr & 0xFF000000) == 0x7F000000);          // 127.0.0.0/8
+    if ((addr & 0xFF000000) == 0x7F000000) {        // 127.0.0.0/8 - Loopback
+        return 999;
+    }
+    if ((addr & 0xFFFF0000) == 0xA9FE0000) {        // 169.254.0.0/16 - APIPA/Link-local
+        return 999; 
+    }
+    if ((addr & 0xFF000000) == 0x0A000000) {        // 10.0.0.0/8
+        return 1;
+    }
+    if ((addr & 0xFFFF0000) == 0xC0A80000) {        // 192.168.0.0/16
+        return 2;
+    }
+    if ((addr & 0xFFF00000) == 0xAC100000) {        // 172.16.0.0/12
+        return 3;
+    }
+    
+    if ((addr & 0xFFC00000) == 0x64400000) {        // 100.64.0.0/10 - CGNAT/Shared Address Space
+        return 4;
+    }
+    
+    return 0; // Public IP - highest priority
 }
 
 std::string GetLocalIP(boost::asio::io_context &io) {
@@ -71,7 +88,10 @@ std::string GetLocalIP(boost::asio::io_context &io) {
         free(adapterAddresses);
         adapterAddresses = (IP_ADAPTER_ADDRESSES *)malloc(bufferSize);
     }
-    std::string addr = "127.0.0.1"; // Default to localhost
+    
+    std::string bestAddr = "127.0.0.1"; // Default fallback
+    int bestPriority = 999;
+    
     if (GetAdaptersAddresses(AF_INET, 0, nullptr, adapterAddresses, &bufferSize) == NO_ERROR) {
         for (IP_ADAPTER_ADDRESSES *adapter = adapterAddresses; adapter; adapter = adapter->Next) {
             if (adapter->OperStatus == IfOperStatusUp && adapter->IfType != IF_TYPE_SOFTWARE_LOOPBACK) {
@@ -85,30 +105,39 @@ std::string GetLocalIP(boost::asio::io_context &io) {
                                  buffer,
                                  INET_ADDRSTRLEN);
                         
-                        // Skip problematic IP addresses
-                        if (!ShouldFilterIP(buffer)) {
-                            addr = buffer;
-                            break;
+                        int priority = GetIPPriority(buffer);
+                        if (priority < bestPriority && priority < 999) {
+                            bestAddr = buffer;
+                            bestPriority = priority;
+                            
+                            // If we found a public IP, we're done
+                            if (priority == 0) {
+                                break;
+                            }
                         }
                     }
                 }
-            }
-            if (addr != "127.0.0.1") {
-                break; // Stop if we found a non-loopback IP
+                // If we found a public IP, break out of adapter loop too
+                if (bestPriority == 0) {
+                    break;
+                }
             }
         }
     }
     free(adapterAddresses);
-    return addr;
+    return bestAddr;
 #else
     // Unix-like implementation using getifaddrs
     struct ifaddrs *ifaddr, *ifa;
     int family;
-    std::string addr = "127.0.0.1"; // Default to localhost
+    std::string bestAddr = "127.0.0.1"; // Default fallback
+    int bestPriority = 999;
+    
     if (getifaddrs(&ifaddr) == -1) {
         perror("getifaddrs");
-        return addr;
+        return bestAddr;
     }
+    
     for (ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
         if (ifa->ifa_addr == nullptr) {
             continue;
@@ -125,16 +154,21 @@ std::string GetLocalIP(boost::asio::io_context &io) {
                                0,
                                NI_NUMERICHOST);
             if (s == 0) {
-                // Skip problematic IP addresses
-                if (!ShouldFilterIP(host)) {
-                    addr = host;
-                    break;
+                int priority = GetIPPriority(host);
+                if (priority < bestPriority && priority < 999) {
+                    bestAddr = host;
+                    bestPriority = priority;
+                    
+                    // If we found a public IP, we're done
+                    if (priority == 0) {
+                        break;
+                    }
                 }
             }
         }
     }
     freeifaddrs(ifaddr);
-    return addr;
+    return bestAddr;
 #endif
 }
 
