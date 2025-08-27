@@ -48,11 +48,15 @@ namespace sgns::ipfs_pubsub
         */
         GossipPubSub();
 
+        GossipPubSub(const libp2p::protocol::gossip::Config& config);
+
         /** Creates a gossip subscription service.
         * keyPair public / private key pair.
         * The public key is used as a gossip channel indentifier in a peer multiaddress
         */
         GossipPubSub(libp2p::crypto::KeyPair keyPair);
+
+        GossipPubSub(libp2p::crypto::KeyPair keyPair, const libp2p::protocol::gossip::Config& config);
 
         ~GossipPubSub();
 
@@ -163,7 +167,14 @@ namespace sgns::ipfs_pubsub
 
     private:
         void Init(std::optional<libp2p::crypto::KeyPair> keyPair);
-
+        static libp2p::protocol::gossip::Config GetDefaultConfig() {
+            libp2p::protocol::gossip::Config config;
+            config.echo_forward_mode = false;  // Production default
+            config.sign_messages = true;
+            config.seen_cache_limit = 10;
+            config.heartbeat_interval_msec = std::chrono::milliseconds{100};
+            return config;
+        }
         std::shared_ptr<sgns::ipfs_lite::ipfs::dht::IpfsDHT> dht_;
         std::shared_ptr<libp2p::protocol::Identify> m_identify;
         std::shared_ptr<libp2p::protocol::IdentifyMessageProcessor> m_identifymsgproc;
@@ -180,6 +191,7 @@ namespace sgns::ipfs_pubsub
         std::vector<libp2p::multi::Multiaddress> m_localAddressAdditional;
         std::shared_ptr<boost::asio::steady_timer> m_timer;
         std::vector<libp2p::protocol::kademlia::ContentId> m_provideCids;
+        libp2p::protocol::gossip::Config config_;
             //Default Bootstrap Servers
         std::vector<std::string> bootstrapAddresses_ = {
             //"/dnsaddr/bootstrap.libp2p.io/ipfs/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",

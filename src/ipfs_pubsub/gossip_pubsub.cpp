@@ -256,12 +256,21 @@ namespace sgns::ipfs_pubsub
         return res ? res.value().toBase58().substr(46) : "???";
     }
 
-    GossipPubSub::GossipPubSub()
+    GossipPubSub::GossipPubSub() : GossipPubSub(GetDefaultConfig())
+    {
+    }
+
+    GossipPubSub::GossipPubSub(const libp2p::protocol::gossip::Config& config) : config_(config)
     {
         Init(std::optional<libp2p::crypto::KeyPair>());
     }
 
-    GossipPubSub::GossipPubSub(libp2p::crypto::KeyPair keyPair)
+
+    GossipPubSub::GossipPubSub(libp2p::crypto::KeyPair keyPair) : GossipPubSub(keyPair, GetDefaultConfig())
+    {
+    }
+
+    GossipPubSub::GossipPubSub(libp2p::crypto::KeyPair keyPair, const libp2p::protocol::gossip::Config& config) : config_(config)
     {
         Init(std::move(keyPair));
     }
@@ -270,12 +279,7 @@ namespace sgns::ipfs_pubsub
     {
         //Init Provid CIDs
         m_provideCids = std::vector<libp2p::protocol::kademlia::ContentId>();
-        // Overriding default config to see local messages as well (echo mode)
-        libp2p::protocol::gossip::Config config;
-        config.echo_forward_mode = false;
-        config.sign_messages = true;
-        config.seen_cache_limit = 10;
-        config.heartbeat_interval_msec = std::chrono::milliseconds{100};
+
         // Objects creating
 
         // Injector creates and ties dependent objects
@@ -295,7 +299,7 @@ namespace sgns::ipfs_pubsub
             injector.create<std::shared_ptr<libp2p::peer::IdentityManager>>(),
             injector.create<std::shared_ptr<libp2p::crypto::CryptoProvider>>(),
             injector.create<std::shared_ptr<libp2p::crypto::marshaller::KeyMarshaller>>(),
-            std::move(config));
+            config_);
 
         //Make a DHT
         auto kademlia =
@@ -582,35 +586,42 @@ std::future<std::error_code> GossipPubSub::Start(
         Stop();
     }
 
-    void GossipPubSub::Stop()
+    void GossipPubSub::Stop() 
     {
-        auto stopF = [this]()
-        {
-            if (!m_context->stopped())
-            {
-                m_context->stop();
+        // First, cancel the timer to prevent new scheduled operations
+        if (m_timer) {
+            m_timer->cancel();
+        }
+
+        auto stopF = [this]() {
+            if (!m_context->stopped()) {
+                // Stop components in reverse order of startup
                 m_gossip->stop();
                 m_host->stop();
-                if (m_timer)
-                {
+                
+                // Cancel any remaining timer operations
+                if (m_timer) {
                     m_timer->cancel();
                 }
+                
+                // Finally stop the context
+                m_context->stop();
             }
         };
 
-        if (m_thread.get_id() == std::this_thread::get_id())
-        {
+        // Always post to strand to ensure proper synchronization
+        if (m_strand && !m_context->stopped()) {
+            m_strand->post(stopF);
+        } else {
             stopF();
         }
-        else
-        {
-            m_strand->post(stopF);
-            if (m_thread.joinable())
-            {
-                m_thread.join();
-            }
+
+        // Wait for the thread to complete
+        if (m_thread.joinable()) {
+            m_thread.join();
         }
     }
+
 
     void GossipPubSub::Wait()
     {
