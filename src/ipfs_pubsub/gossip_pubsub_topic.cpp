@@ -48,9 +48,11 @@ namespace sgns::ipfs_pubsub
 
     void GossipPubSubTopic::Unsubscribe()
     {
-        auto shared_sub = m_subscription.get();
-        if (shared_sub) {
-            shared_sub->cancel(); // Now non-const!
+        if (m_subscription.valid()) {
+            auto shared_sub = m_subscription.get();
+            if (shared_sub) {
+                shared_sub->cancel();  // Now non-const!
+            }
         }
         // if (m_subscription.valid())
         // {
