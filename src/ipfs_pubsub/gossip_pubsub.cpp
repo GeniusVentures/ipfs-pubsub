@@ -588,24 +588,60 @@ std::future<std::error_code> GossipPubSub::Start(
 
     void GossipPubSub::Stop() 
     {
+        // Cancel all subscriptions before stopping
+        for(auto& subscription : m_subscriptions)
+        {
+            if (subscription.valid())
+            {
+                try {
+                    auto shared_sub = subscription.get(); // Gets shared_ptr<Subscription>
+                    if (shared_sub) {
+                        shared_sub->cancel(); // Now non-const!
+                    }
+                } catch (...) {
+                    // Handle exceptions
+                }
+            }
+        }
+        m_subscriptions.clear();
+        if (m_context->stopped()) {
+            return; // Already stopped
+        }
+
         // First, cancel the timer to prevent new scheduled operations
         if (m_timer) {
             m_timer->cancel();
         }
 
-        auto stopF = [this]() {
-            if (!m_context->stopped()) {
-                // Stop components in reverse order of startup
-                m_gossip->stop();
-                m_host->stop();
-                
-                // Cancel any remaining timer operations
-                if (m_timer) {
-                    m_timer->cancel();
+        // Use a promise/future to wait for actual shutdown completion
+        std::promise<void> shutdownPromise;
+        auto shutdownFuture = shutdownPromise.get_future();
+
+        auto stopF = [this, &shutdownPromise]() {
+            try {
+                if (!m_context->stopped()) {
+                    // Stop components in reverse order of startup
+                    if (m_gossip) {
+                        m_gossip->stop();
+                        // Wait for gossip to actually stop (if possible)
+                    }
+                    
+                    if (m_host) {
+                        m_host->stop();
+                        // Wait for host to actually stop (if possible)
+                    }
+                    
+                    // Cancel any remaining timer operations
+                    if (m_timer) {
+                        m_timer->cancel();
+                    }
+                    
+                    // Finally stop the context
+                    m_context->stop();
                 }
-                
-                // Finally stop the context
-                m_context->stop();
+                shutdownPromise.set_value(); // Signal completion
+            } catch (...) {
+                shutdownPromise.set_exception(std::current_exception());
             }
         };
 
@@ -616,11 +652,19 @@ std::future<std::error_code> GossipPubSub::Start(
             stopF();
         }
 
+        // Wait for shutdown to actually complete (with timeout)
+        auto status = shutdownFuture.wait_for(std::chrono::milliseconds(1000));
+        if (status == std::future_status::timeout) {
+            // Force shutdown if it takes too long
+            m_context->stop();
+        }
+
         // Wait for the thread to complete
         if (m_thread.joinable()) {
             m_thread.join();
         }
     }
+
 
 
     void GossipPubSub::Wait()
@@ -631,33 +675,40 @@ std::future<std::error_code> GossipPubSub::Start(
         }
     }
 
-    std::future<GossipPubSub::Subscription> GossipPubSub::Subscribe(const std::string& topic, MessageCallback onMessageCallback)
+    std::shared_future<std::shared_ptr<GossipPubSub::Subscription>> GossipPubSub::Subscribe(const std::string& topic, MessageCallback onMessageCallback)
     {
-        auto subscription = std::make_shared<std::promise<GossipPubSub::Subscription>>();
+        auto subscription = std::make_shared<std::promise<std::shared_ptr<GossipPubSub::Subscription>>>();
+        
         auto subsF = [subscription, this, topic, onMessageCallback]()
         {
             using Message = libp2p::protocol::gossip::Gossip::Message;
-            // Forwarding is required to force assigment operator, otherwise subscription is cancelled.
-            subscription->set_value(std::forward<Subscription>(m_gossip->subscribe({ topic }, onMessageCallback)));
+            auto sub = m_gossip->subscribe({ topic }, onMessageCallback);
+            auto shared_sub = std::make_shared<Subscription>(std::move(sub));
+            subscription->set_value(shared_sub);
+            
             if (m_logger->should_log(spdlog::level::info))
             {
-                m_logger->info((boost::format("%s: PubSub subscribed to topic '%s'") % m_localAddress[0] % topic).str());
+                m_logger->info((boost::format("%s: PubSub subscribed to topic '%s'") % m_localAddress % topic).str());
             }
         };
 
         if (m_thread.get_id() == std::this_thread::get_id())
         {
-            // Subscribe synchronously when the method is called from a pubsub callback
-            // For instance the method can be called from a topic message processing callback
-            // Otherwise a waiting for the subscription can lead to a dead lock
             subsF();
         }
         else
         {
             m_strand->post(subsF);
         }
-        return subscription->get_future();
+        
+        auto shared_future = subscription->get_future().share();
+        
+        // Store for internal management
+        m_subscriptions.push_back(shared_future);
+        
+        return shared_future;
     }
+
 
     void GossipPubSub::Publish(const std::string& topic, const std::vector<uint8_t>& message)
     {

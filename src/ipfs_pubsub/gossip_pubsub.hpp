@@ -65,7 +65,7 @@ namespace sgns::ipfs_pubsub
         * @param onMessageCallback - callback which is invoked when the topic messages are received
         * @return subscription handler.
         */ 
-        std::future<Subscription> Subscribe(const std::string& topic, MessageCallback onMessageCallback);
+        std::shared_future<std::shared_ptr<GossipPubSub::Subscription>> Subscribe(const std::string& topic, MessageCallback onMessageCallback);
 
         /** Publish a string message to specific topic.
         * @param topic - a topic to publish a message to.
@@ -191,6 +191,7 @@ namespace sgns::ipfs_pubsub
         std::vector<libp2p::multi::Multiaddress> m_localAddressAdditional;
         std::shared_ptr<boost::asio::steady_timer> m_timer;
         std::vector<libp2p::protocol::kademlia::ContentId> m_provideCids;
+        std::vector<std::shared_future<std::shared_ptr<Subscription>>> m_subscriptions;
         libp2p::protocol::gossip::Config config_;
             //Default Bootstrap Servers
         std::vector<std::string> bootstrapAddresses_ = {
