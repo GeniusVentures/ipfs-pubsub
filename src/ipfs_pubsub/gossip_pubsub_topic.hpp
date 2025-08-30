@@ -22,13 +22,14 @@ public:
     * @param topic - a topic id
     */
     GossipPubSubTopic( std::shared_ptr<GossipPubSub> gossipPubSub, std::string topic );
+    ~GossipPubSubTopic();
 
     /** Subscribes the object to specified topic.
     * @param onMessageCallback - callback which is invoked when the topic messages are received
     * @param subscribeNow - wait for the subscription to become active
     * @return subscription handler.
     */
-    std::future<Subscription> &Subscribe( SubscriptionCallback onMessageCallback, bool subscribeNow = false );
+    std::shared_future<std::shared_ptr<Subscription>> &Subscribe( SubscriptionCallback onMessageCallback, bool subscribeNow = false );
 
     /** Cancels subscription.
     */
@@ -69,7 +70,7 @@ public:
 private:
     std::shared_ptr<GossipPubSub> m_gossipPubSub;
     std::string                   m_topic;
-    std::future<Subscription>     m_subscription;
+    std::shared_future<std::shared_ptr<Subscription>>     m_subscription;
 };
 }
 

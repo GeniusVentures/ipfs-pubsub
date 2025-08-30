@@ -21,7 +21,12 @@ namespace sgns::ipfs_pubsub
     {
     }
 
-    std::future<GossipPubSubTopic::Subscription> &GossipPubSubTopic::Subscribe( SubscriptionCallback onMessageCallback, bool subscribeNow )
+    GossipPubSubTopic::~GossipPubSubTopic()
+    {
+        Unsubscribe();
+    }
+
+    std::shared_future<std::shared_ptr<GossipPubSubTopic::Subscription>> &GossipPubSubTopic::Subscribe( SubscriptionCallback onMessageCallback, bool subscribeNow )
     {
         m_subscription = m_gossipPubSub->Subscribe(m_topic, onMessageCallback);
         if (subscribeNow)
@@ -43,10 +48,14 @@ namespace sgns::ipfs_pubsub
 
     void GossipPubSubTopic::Unsubscribe()
     {
-        if (m_subscription.valid())
-        {
-	        m_subscription.get().cancel();
+        auto shared_sub = m_subscription.get();
+        if (shared_sub) {
+            shared_sub->cancel(); // Now non-const!
         }
+        // if (m_subscription.valid())
+        // {
+	    //     m_subscription.get().cancel();
+        // }
     }
     size_t GossipPubSubTopic::getPeerCount() const
     {
