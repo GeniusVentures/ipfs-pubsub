@@ -210,13 +210,25 @@ auto makeCustomHostInjector(std::optional<libp2p::crypto::KeyPair> keyPair, Ts &
     namespace di = boost::di;
 
     libp2p::protocol::kademlia::Config kademlia_config;
-    kademlia_config.randomWalk.enabled = false;              // Disable random walks to eliminate random connections
-    kademlia_config.randomWalk.interval = std::chrono::minutes(15);  // If ever re-enabled, less frequent
-    kademlia_config.requestConcurency = 1;                   // Reduce concurrent searches from 3 to 1
-    kademlia_config.maxProvidersPerKey = 300;                // Keep high - you want to find actual providers
-    kademlia_config.maxBucketSize = 80;                      // Critical: Increase from 5 to 80 for fewer hops
-    kademlia_config.closerPeerCount = 10;                    // More focused searches
-    kademlia_config.responseTimeout = std::chrono::seconds(5);        // Faster timeout on dead connections (was 10s default)
+    // Keep random walk for decentralization but make it very conservative
+    kademlia_config.randomWalk.enabled = true;
+    kademlia_config.randomWalk.interval = std::chrono::seconds(300);   // Every 5 minutes (was 30s default)
+    kademlia_config.randomWalk.queries_per_period = 1;               // Only 1 query per period
+    kademlia_config.randomWalk.timeout = std::chrono::seconds(3);     // Short timeout for random walks
+    kademlia_config.randomWalk.delay = std::chrono::seconds(60);      // Long delay between queries
+    
+    kademlia_config.requestConcurency = 1;                           // Keep single concurrent request
+    kademlia_config.maxProvidersPerKey = 300;                        // Keep provider finding effective
+    kademlia_config.maxBucketSize = 10;                              // Smaller than default 20, bigger than original 5
+    kademlia_config.closerPeerCount = 5;                             // Reduce search scope (was 6 default)
+    
+    // Aggressive connection cleanup timeouts
+    kademlia_config.responseTimeout = std::chrono::seconds(2);       // Very fast response timeout (was 10s)
+    kademlia_config.connectionTimeout = std::chrono::seconds(1);     // Very fast connection timeout (was 3s)
+    
+    // More aggressive provider record cleanup
+    kademlia_config.providerRecordTTL = std::chrono::seconds(300);   // 5 minutes (was 24h)
+    kademlia_config.providerWipingInterval = std::chrono::seconds(60); // Clean every minute (was 1h)
 
     auto csprng = std::make_shared<crypto::random::BoostRandomGenerator>();
     auto ed25519_provider = std::make_shared<crypto::ed25519::Ed25519ProviderImpl>();
