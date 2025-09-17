@@ -385,11 +385,17 @@ std::future<std::error_code> GossipPubSub::Start(
         m_logger->info((boost::format("%s: Starting PubSub service") % m_localAddress).str());
 
         // Tell gossip to connect to remote peers, only if specified
+        auto& conn_mgr = m_host->getNetwork().getConnectionManager();
+        
         for (const auto& remotePeerAddress : booststrapPeers)
         {
             boost::optional<libp2p::peer::PeerInfo> remotePeerInfo = PeerInfoFromString(remotePeerAddress);
             if (remotePeerInfo)
             {
+                // Protect bootstrap peers - they are manually configured important peers
+                conn_mgr.protectPeer(remotePeerInfo->id, "bootstrap-peer");
+                conn_mgr.tagPeer(remotePeerInfo->id, "bootstrap", 300);  // Medium-high value tag
+                
                 m_gossip->addBootstrapPeer(remotePeerInfo->id, remotePeerInfo->addresses[0]);
             }
         }
@@ -465,9 +471,16 @@ std::future<std::error_code> GossipPubSub::Start(
             auto& providers = res.value();
             if (!providers.empty())
             {
+                // Get connection manager for protecting valuable provider peers
+                auto& conn_mgr = m_host->getNetwork().getConnectionManager();
+                
                 for (auto& provider : providers) {
                     if(provider.id != m_host->getId())
                     {
+                        // Protect provider peers - they are valuable for content discovery
+                        conn_mgr.protectPeer(provider.id, "dht-provider");
+                        conn_mgr.tagPeer(provider.id, "content-provider", 500);  // High value tag
+                        
                         m_gossip->addBootstrapPeer(provider.id, provider.addresses[0]);   
                     }         
                 }
@@ -500,6 +513,9 @@ std::future<std::error_code> GossipPubSub::Start(
             auto& providers = res.value();
             if (!providers.empty())
             {
+                // Get connection manager for protecting valuable provider peers  
+                auto& conn_mgr = m_host->getNetwork().getConnectionManager();
+                
                 for (auto& provider : providers) {
                     std::cout << "New Peer: " << provider.id.toBase58() << std::endl;
                     for(auto& provaddr : provider.addresses)           
@@ -509,6 +525,10 @@ std::future<std::error_code> GossipPubSub::Start(
                     }
                     if(provider.id != m_host->getId())
                     {
+                        // Protect provider peers - they are valuable for content discovery
+                        conn_mgr.protectPeer(provider.id, "dht-provider");
+                        conn_mgr.tagPeer(provider.id, "content-provider", 500);  // High value tag
+                        
                         m_gossip->addBootstrapPeer(provider.id, provider.addresses[0]);
                     }
                 }
@@ -573,12 +593,18 @@ std::future<std::error_code> GossipPubSub::Start(
 
     void GossipPubSub::AddPeers(const std::vector<std::string>& booststrapPeers)
     {
+        auto& conn_mgr = m_host->getNetwork().getConnectionManager();
+        
         for (const auto& remotePeerAddress : booststrapPeers)
         {
             //std::vector<std::string> remoteAddr = {remotePeerAddress};
             boost::optional<libp2p::peer::PeerInfo> remotePeerInfo = PeerInfoFromString(remotePeerAddress);
             if (remotePeerInfo)
             {
+                // Protect bootstrap peers - they are manually configured important peers
+                conn_mgr.protectPeer(remotePeerInfo->id, "bootstrap-peer");
+                conn_mgr.tagPeer(remotePeerInfo->id, "bootstrap", 300);  // Medium-high value tag
+                
                 m_gossip->addBootstrapPeer(remotePeerInfo->id, remotePeerInfo->addresses[0]);
             }
         }
