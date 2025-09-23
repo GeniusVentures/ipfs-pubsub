@@ -80,96 +80,10 @@ int GetIPPriority(const std::string& ip) {
 }
 
 std::string GetLocalIP(boost::asio::io_context &io) {
-#if defined(_WIN32)
-    // Windows implementation using GetAdaptersAddresses
-    ULONG bufferSize = 15000;
-    IP_ADAPTER_ADDRESSES *adapterAddresses = (IP_ADAPTER_ADDRESSES *)malloc(bufferSize);
-    if (GetAdaptersAddresses(AF_INET, 0, nullptr, adapterAddresses, &bufferSize) == ERROR_BUFFER_OVERFLOW) {
-        free(adapterAddresses);
-        adapterAddresses = (IP_ADAPTER_ADDRESSES *)malloc(bufferSize);
-    }
-    
-    std::string bestAddr = "127.0.0.1"; // Default fallback
-    int bestPriority = 999;
-    
-    if (GetAdaptersAddresses(AF_INET, 0, nullptr, adapterAddresses, &bufferSize) == NO_ERROR) {
-        for (IP_ADAPTER_ADDRESSES *adapter = adapterAddresses; adapter; adapter = adapter->Next) {
-            if (adapter->OperStatus == IfOperStatusUp && adapter->IfType != IF_TYPE_SOFTWARE_LOOPBACK) {
-                for (IP_ADAPTER_UNICAST_ADDRESS *unicast = adapter->FirstUnicastAddress; unicast;
-                     unicast = unicast->Next) {
-                    SOCKADDR *addrStruct = unicast->Address.lpSockaddr;
-                    if (addrStruct->sa_family == AF_INET) { // For IPv4
-                        char buffer[INET_ADDRSTRLEN];
-                        inet_ntop(AF_INET,
-                                 &(((struct sockaddr_in *)addrStruct)->sin_addr),
-                                 buffer,
-                                 INET_ADDRSTRLEN);
-                        
-                        int priority = GetIPPriority(buffer);
-                        if (priority < bestPriority && priority < 999) {
-                            bestAddr = buffer;
-                            bestPriority = priority;
-                            
-                            // If we found a public IP, we're done
-                            if (priority == 0) {
-                                break;
-                            }
-                        }
-                    }
-                }
-                // If we found a public IP, break out of adapter loop too
-                if (bestPriority == 0) {
-                    break;
-                }
-            }
-        }
-    }
-    free(adapterAddresses);
-    return bestAddr;
-#else
-    // Unix-like implementation using getifaddrs
-    struct ifaddrs *ifaddr, *ifa;
-    int family;
-    std::string bestAddr = "127.0.0.1"; // Default fallback
-    int bestPriority = 999;
-    
-    if (getifaddrs(&ifaddr) == -1) {
-        perror("getifaddrs");
-        return bestAddr;
-    }
-    
-    for (ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
-        if (ifa->ifa_addr == nullptr) {
-            continue;
-        }
-        family = ifa->ifa_addr->sa_family;
-        // We only want IPv4 addresses
-        if (family == AF_INET && !(ifa->ifa_flags & IFF_LOOPBACK)) {
-            char host[NI_MAXHOST];
-            int s = getnameinfo(ifa->ifa_addr,
-                               sizeof(struct sockaddr_in),
-                               host,
-                               NI_MAXHOST,
-                               nullptr,
-                               0,
-                               NI_NUMERICHOST);
-            if (s == 0) {
-                int priority = GetIPPriority(host);
-                if (priority < bestPriority && priority < 999) {
-                    bestAddr = host;
-                    bestPriority = priority;
-                    
-                    // If we found a public IP, we're done
-                    if (priority == 0) {
-                        break;
-                    }
-                }
-            }
-        }
-    }
-    freeifaddrs(ifaddr);
-    return bestAddr;
-#endif
+    // Return 0.0.0.0 for wildcard binding to handle mobile network changes
+    // This allows the libp2p host to automatically bind to all available interfaces
+    // The address monitoring system will track actual interfaces and update the DHT
+    return "0.0.0.0";
 }
 
 boost::optional<libp2p::peer::PeerInfo> PeerInfoFromString(const std::string& addresses) {
@@ -427,12 +341,27 @@ std::future<std::error_code> GossipPubSub::Start(
                 else
                 {
 
-                    // Adding LAN and WAN addresses to the local peer
-                    //m_host->getPeerRepository().getAddressRepository().upsertAddresses(peerInfo->id, peerInfo->addresses, libp2p::peer::ttl::kPermanent);
+                    // Adding LAN and WAN addresses to the local peer with appropriate TTL
                     if(m_localAddressAdditional.size() > 0)
                     {
-                        m_host->getPeerRepository().getAddressRepository().upsertAddresses(peerInfo->id, m_localAddressAdditional, libp2p::peer::ttl::kPermanent);
+                        m_logger->info("Adding {} additional local addresses with TTL=10min (kRecentlyConnected)", m_localAddressAdditional.size());
+                        for(const auto& addr : m_localAddressAdditional) {
+                            m_logger->info("  -> Additional address: {}", addr.getStringAddress());
+                        }
+                        
+                        // Use kRecentlyConnected (10 minutes) instead of kPermanent for dynamic addresses
+                        auto result = m_host->getPeerRepository().getAddressRepository().upsertAddresses(
+                            peerInfo->id, m_localAddressAdditional, libp2p::peer::ttl::kRecentlyConnected);
+                        
+                        if(result) {
+                            m_logger->info("Successfully added {} additional addresses to peer repository", m_localAddressAdditional.size());
+                        } else {
+                            m_logger->error("Failed to add additional addresses: {}", result.error().message());
+                        }
                     }
+                    
+                    // Start address monitoring and refresh system
+                    startAddressMonitoring();
                     
                     m_host->start();
                     m_gossip->start();
@@ -767,5 +696,248 @@ std::future<std::error_code> GossipPubSub::Start(
     std::shared_ptr<boost::asio::io_context> GossipPubSub::GetAsioContext() const
     {
         return m_context;
+    }
+
+    // Address monitoring implementation
+    void GossipPubSub::startAddressMonitoring()
+    {
+        m_address_monitor_timer = std::make_shared<boost::asio::steady_timer>(*m_context);
+        
+        m_logger->info("Starting address monitoring system for mobile network changes");
+        
+        // Perform initial address logging
+        logCurrentNetworkState();
+        
+        // Schedule first address refresh in 30 seconds
+        scheduleNextAddressRefresh();
+    }
+
+    void GossipPubSub::refreshLocalAddresses()
+    {
+        m_logger->info("=== Address Refresh Cycle Started ===");
+        
+        try {
+            // Get current network interfaces
+            auto current_interfaces = getCurrentNetworkInterfaces();
+            
+            if (current_interfaces.empty()) {
+                m_logger->warn("No network interfaces found during refresh!");
+                return;
+            }
+            
+            // Build multiaddresses from current interfaces
+            std::vector<libp2p::multi::Multiaddress> current_addresses;
+            int listening_port = 0;
+            
+            // Extract port from existing local address
+            if (!m_localAddress.empty()) {
+                auto ma_res = libp2p::multi::Multiaddress::create(m_localAddress);
+                if (ma_res) {
+                    auto protocols = ma_res.value().getProtocolsWithValues();
+                    for (const auto& proto : protocols) {
+                        if (proto.first.code == libp2p::multi::Protocol::Code::TCP) {
+                            listening_port = std::stoi(proto.second);
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            if (listening_port == 0) {
+                m_logger->error("Could not extract listening port from local address: {}", m_localAddress);
+                return;
+            }
+            
+            // Create multiaddresses for each interface
+            for (const auto& interface_ip : current_interfaces) {
+                auto ma_str = (boost::format("/ip4/%s/tcp/%d/p2p/%s") 
+                               % interface_ip % listening_port % m_host->getId().toBase58()).str();
+                auto ma_res = libp2p::multi::Multiaddress::create(ma_str);
+                if (ma_res) {
+                    current_addresses.push_back(ma_res.value());
+                    m_logger->info("  -> New interface address: {}", ma_str);
+                } else {
+                    m_logger->error("Failed to create multiaddress for interface {}: {}", 
+                                  interface_ip, ma_res.error().message());
+                }
+            }
+            
+            if (!current_addresses.empty()) {
+                // Update with new addresses using short TTL
+                auto result = m_host->getPeerRepository().getAddressRepository().upsertAddresses(
+                    m_host->getId(), current_addresses, libp2p::peer::ttl::kRecentlyConnected);
+                
+                if (result) {
+                    m_logger->info("Successfully refreshed {} addresses with 10-minute TTL", current_addresses.size());
+                } else {
+                    m_logger->error("Failed to refresh addresses: {}", result.error().message());
+                }
+                
+                // Update our additional addresses list
+                m_localAddressAdditional = current_addresses;
+                
+            } else {
+                m_logger->warn("No valid addresses generated from network interfaces");
+            }
+            
+        } catch (const std::exception& e) {
+            m_logger->error("Exception during address refresh: {}", e.what());
+        }
+        
+        m_logger->info("=== Address Refresh Cycle Completed ===");
+    }
+
+    void GossipPubSub::scheduleNextAddressRefresh()
+    {
+        if (!m_address_monitor_timer || m_context->stopped()) {
+            return;
+        }
+        
+        // Refresh every 30 seconds for real-time monitoring during mobile testing
+        m_address_monitor_timer->expires_after(std::chrono::seconds(30));
+        m_address_monitor_timer->async_wait([this](const boost::system::error_code& ec) {
+            if (!ec && !m_context->stopped()) {
+                refreshLocalAddresses();
+                scheduleNextAddressRefresh();
+            } else if (ec) {
+                m_logger->error("Address monitoring timer error: {}", ec.message());
+            }
+        });
+    }
+
+    void GossipPubSub::onNetworkChange()
+    {
+        m_logger->warn("=== NETWORK CHANGE DETECTED ===");
+        
+        // Force immediate address refresh
+        refreshLocalAddresses();
+        
+        // Republish to DHT if we have content to provide
+        if (!m_provideCids.empty()) {
+            m_logger->info("Republishing {} CIDs to DHT after network change", m_provideCids.size());
+            for (const auto& cid : m_provideCids) {
+                dht_->ProvideCID(cid, true);
+            }
+        }
+        
+        m_logger->info("Network change handling completed");
+    }
+
+    std::vector<std::string> GossipPubSub::getCurrentNetworkInterfaces()
+    {
+        std::vector<std::string> interfaces;
+        
+        try {
+#if defined(_WIN32)
+            // Windows implementation using GetAdaptersAddresses
+            ULONG bufferSize = 15000;
+            IP_ADAPTER_ADDRESSES *adapterAddresses = (IP_ADAPTER_ADDRESSES *)malloc(bufferSize);
+            if (GetAdaptersAddresses(AF_INET, 0, nullptr, adapterAddresses, &bufferSize) == ERROR_BUFFER_OVERFLOW) {
+                free(adapterAddresses);
+                adapterAddresses = (IP_ADAPTER_ADDRESSES *)malloc(bufferSize);
+            }
+            
+            if (GetAdaptersAddresses(AF_INET, 0, nullptr, adapterAddresses, &bufferSize) == NO_ERROR) {
+                for (IP_ADAPTER_ADDRESSES *adapter = adapterAddresses; adapter; adapter = adapter->Next) {
+                    if (adapter->OperStatus == IfOperStatusUp && adapter->IfType != IF_TYPE_SOFTWARE_LOOPBACK) {
+                        
+                        // Log adapter details for debugging
+                        std::string adapter_name = adapter->AdapterName ? adapter->AdapterName : "Unknown";
+                        std::wstring friendly_name = adapter->FriendlyName ? adapter->FriendlyName : L"Unknown";
+                        std::string friendly_name_str(friendly_name.begin(), friendly_name.end());
+                        
+                        m_logger->debug("Checking adapter: {} ({}), Type: {}, Status: {}", 
+                                      adapter_name, friendly_name_str, adapter->IfType, (int)adapter->OperStatus);
+                        
+                        for (IP_ADAPTER_UNICAST_ADDRESS *unicast = adapter->FirstUnicastAddress; unicast; unicast = unicast->Next) {
+                            SOCKADDR *addrStruct = unicast->Address.lpSockaddr;
+                            if (addrStruct->sa_family == AF_INET) {
+                                char buffer[INET_ADDRSTRLEN];
+                                inet_ntop(AF_INET, &(((struct sockaddr_in *)addrStruct)->sin_addr), buffer, INET_ADDRSTRLEN);
+                                
+                                int priority = GetIPPriority(buffer);
+                                m_logger->debug("  Interface IP: {} (priority: {})", buffer, priority);
+                                
+                                if (priority < 999) { // Valid non-loopback address
+                                    interfaces.push_back(buffer);
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                m_logger->error("GetAdaptersAddresses failed");
+            }
+            free(adapterAddresses);
+#else
+            // Unix-like implementation using getifaddrs
+            struct ifaddrs *ifaddr, *ifa;
+            
+            if (getifaddrs(&ifaddr) == -1) {
+                m_logger->error("getifaddrs failed: {}", strerror(errno));
+                return interfaces;
+            }
+            
+            for (ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
+                if (ifa->ifa_addr == nullptr) continue;
+                
+                int family = ifa->ifa_addr->sa_family;
+                if (family == AF_INET && !(ifa->ifa_flags & IFF_LOOPBACK)) {
+                    char host[NI_MAXHOST];
+                    int s = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), 
+                                      host, NI_MAXHOST, nullptr, 0, NI_NUMERICHOST);
+                    if (s == 0) {
+                        int priority = GetIPPriority(host);
+                        m_logger->debug("Interface {}: {} (priority: {})", 
+                                      ifa->ifa_name ? ifa->ifa_name : "unknown", host, priority);
+                        
+                        if (priority < 999) { // Valid non-loopback address
+                            interfaces.push_back(host);
+                        }
+                    }
+                }
+            }
+            freeifaddrs(ifaddr);
+#endif
+        } catch (const std::exception& e) {
+            m_logger->error("Exception in getCurrentNetworkInterfaces: {}", e.what());
+        }
+        
+        m_logger->info("Found {} valid network interfaces", interfaces.size());
+        return interfaces;
+    }
+
+    void GossipPubSub::logCurrentNetworkState()
+    {
+        m_logger->info("=== CURRENT NETWORK STATE ===");
+        
+        // Log primary listening address
+        m_logger->info("Primary listening address: {}", m_localAddress);
+        
+        // Log additional addresses
+        m_logger->info("Additional addresses ({}):", m_localAddressAdditional.size());
+        for (const auto& addr : m_localAddressAdditional) {
+            m_logger->info("  -> {}", addr.getStringAddress());
+        }
+        
+        // Log peer repository addresses
+        auto repo_addresses = m_host->getPeerRepository().getAddressRepository().getAddresses(m_host->getId());
+        if (repo_addresses) {
+            m_logger->info("Peer repository addresses ({}):", repo_addresses.value().size());
+            for (const auto& addr : repo_addresses.value()) {
+                m_logger->info("  -> {}", addr.getStringAddress());
+            }
+        } else {
+            m_logger->warn("Failed to get addresses from peer repository: {}", repo_addresses.error().message());
+        }
+        
+        // Log current network interfaces
+        auto interfaces = getCurrentNetworkInterfaces();
+        m_logger->info("Current network interfaces ({}):", interfaces.size());
+        for (const auto& ip : interfaces) {
+            m_logger->info("  -> {}", ip);
+        }
+        
+        m_logger->info("=== END NETWORK STATE ===");
     }
 }

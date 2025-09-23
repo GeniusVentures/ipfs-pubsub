@@ -4,10 +4,15 @@
 #include <ipfs_pubsub/logger.hpp>
 
 #include <string>
+#include <chrono>
+#include <unordered_map>
+#include <set>
 
 // boost/asio/io_context.hpp must be included before libp2p.
 // Otherwise an error of the second including of winsock.h is thrown on Windows
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/signals2.hpp>
 
 #include <libp2p/peer/peer_info.hpp>
 #include <libp2p/protocol/gossip/gossip.hpp>
@@ -193,6 +198,17 @@ namespace sgns::ipfs_pubsub
         std::vector<libp2p::protocol::kademlia::ContentId> m_provideCids;
         std::vector<std::shared_future<std::shared_ptr<Subscription>>> m_subscriptions;
         libp2p::protocol::gossip::Config config_;
+        
+        // Address monitoring and peer management
+        std::shared_ptr<boost::asio::steady_timer> m_address_monitor_timer;
+        
+        // Address management methods
+        void startAddressMonitoring();
+        void refreshLocalAddresses();
+        void scheduleNextAddressRefresh();
+        void onNetworkChange();
+        std::vector<std::string> getCurrentNetworkInterfaces();
+        void logCurrentNetworkState();
             //Default Bootstrap Servers
         std::vector<std::string> bootstrapAddresses_ = {
             //"/dnsaddr/bootstrap.libp2p.io/ipfs/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
