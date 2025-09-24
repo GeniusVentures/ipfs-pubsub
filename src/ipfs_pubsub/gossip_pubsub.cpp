@@ -785,6 +785,9 @@ std::future<std::error_code> GossipPubSub::Start(
         }
         
         m_logger->info("=== Address Refresh Cycle Completed ===");
+        
+        // Log comprehensive network state after each refresh
+        logCurrentNetworkState();
     }
 
     void GossipPubSub::scheduleNextAddressRefresh()
@@ -911,12 +914,52 @@ std::future<std::error_code> GossipPubSub::Start(
     {
         m_logger->info("=== CURRENT NETWORK STATE ===");
         
+        // Get comprehensive peer info from host
+        auto peer_info = m_host->getPeerInfo();
+        
         // Log primary listening address
         m_logger->info("Primary listening address: {}", m_localAddress);
         
-        // Log additional addresses
-        m_logger->info("Additional addresses ({}):", m_localAddressAdditional.size());
+        // Log all addresses from peer info (this includes observed, interface, relay addresses)
+        m_logger->info("Host peer info addresses ({}):", peer_info.addresses.size());
+        for (const auto& addr : peer_info.addresses) {
+            m_logger->info("  -> {}", addr.getStringAddress());
+        }
+        
+        // Log additional addresses we're tracking
+        m_logger->info("Additional addresses we track ({}):", m_localAddressAdditional.size());
         for (const auto& addr : m_localAddressAdditional) {
+            m_logger->info("  -> {}", addr.getStringAddress());
+        }
+        
+        // Log separate categories for more detail
+        auto listening_addresses = m_host->getAddresses();
+        m_logger->info("Listening addresses ({}):", listening_addresses.size());
+        for (const auto& addr : listening_addresses) {
+            m_logger->info("  -> {}", addr.getStringAddress());
+        }
+        
+        auto interface_addresses = m_host->getAddressesInterfaces();
+        m_logger->info("Interface addresses ({}):", interface_addresses.size());
+        for (const auto& addr : interface_addresses) {
+            m_logger->info("  -> {}", addr.getStringAddress());
+        }
+        
+        auto observed_addresses = m_host->getObservedAddressesReal(false);
+        m_logger->info("Observed addresses - all ({}):", observed_addresses.size());
+        for (const auto& addr : observed_addresses) {
+            m_logger->info("  -> {}", addr.getStringAddress());
+        }
+        
+        auto confirmed_observed = m_host->getObservedAddressesReal(true);
+        m_logger->info("Observed addresses - confirmed only ({}):", confirmed_observed.size());
+        for (const auto& addr : confirmed_observed) {
+            m_logger->info("  -> {}", addr.getStringAddress());
+        }
+        
+        auto relay_addresses = m_host->getRelayAddresses();
+        m_logger->info("Relay addresses ({}):", relay_addresses.size());
+        for (const auto& addr : relay_addresses) {
             m_logger->info("  -> {}", addr.getStringAddress());
         }
         
@@ -931,12 +974,32 @@ std::future<std::error_code> GossipPubSub::Start(
             m_logger->warn("Failed to get addresses from peer repository: {}", repo_addresses.error().message());
         }
         
-        // Log current network interfaces
+        // Log current network interfaces from our detection
         auto interfaces = getCurrentNetworkInterfaces();
         m_logger->info("Current network interfaces ({}):", interfaces.size());
         for (const auto& ip : interfaces) {
             m_logger->info("  -> {}", ip);
         }
+        
+        // Log connection manager information
+        auto& conn_mgr = m_host->getNetwork().getConnectionManager();
+        auto connections = conn_mgr.getConnections();
+        m_logger->info("Active connections: {}", connections.size());
+        
+        for (const auto& conn : connections) {
+            auto remote_peer = conn->remotePeer();
+            auto remote_addr = conn->remoteMultiaddr();
+            if (remote_peer && remote_addr) {
+                m_logger->info("  -> Connected to: {} at {}", 
+                             remote_peer.value().toBase58().substr(46), 
+                             remote_addr.value().getStringAddress());
+            }
+        }
+        
+        // Log connection manager stats
+        m_logger->info("Connection manager stats:");
+        m_logger->info("  -> Max connections: {}", conn_mgr.getConfig().max_connections);
+        m_logger->info("  -> Current connections: {}", connections.size());
         
         m_logger->info("=== END NETWORK STATE ===");
     }
