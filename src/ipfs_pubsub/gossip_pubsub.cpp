@@ -998,7 +998,7 @@ std::future<std::error_code> GossipPubSub::Start(
         
         // Log connection manager stats
         m_logger->info("Connection manager stats:");
-        m_logger->info("  -> Max connections: {}", conn_mgr.getConfig().max_connections);
+        m_logger->info("  -> Max connections: {}", conn_mgr.getConfig().high_water);
         m_logger->info("  -> Current connections: {}", connections.size());
         
         m_logger->info("=== END NETWORK STATE ===");
