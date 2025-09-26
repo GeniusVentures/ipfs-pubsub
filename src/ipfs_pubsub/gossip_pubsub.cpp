@@ -4,6 +4,7 @@
 #include <boost/format.hpp>
 #include <libp2p/injector/host_injector.hpp>
 #include <libp2p/injector/kademlia_injector.hpp>
+#include <libp2p/security/noise.hpp>
 
 #include <boost/di/extension/scopes/shared.hpp>
 #if defined(_WIN32)
@@ -170,6 +171,8 @@ auto makeCustomHostInjector(std::optional<libp2p::crypto::KeyPair> keyPair, Ts &
         //Kademlia
         libp2p::injector::makeKademliaInjector(
             libp2p::injector::useKademliaConfig(kademlia_config)),
+        // Configure security to only support Noise (no plaintext)
+        libp2p::injector::useSecurityAdaptors<libp2p::security::Noise>(),
         std::forward<decltype(args)>(args)...);
 
     return injector;
