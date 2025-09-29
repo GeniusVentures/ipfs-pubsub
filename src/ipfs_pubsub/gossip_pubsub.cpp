@@ -275,7 +275,7 @@ std::future<std::error_code> GossipPubSub::Start(
 
 
         //if (bindAddresses.empty()) {
-            std::cout << "Using default bind addresses" << std::endl;
+            m_logger->debug("Using default bind addresses");
             //m_localAddress.push_back((boost::format("/ip4/%s/tcp/%d/p2p/%s") % GetLocalIP(*m_context) % listeningPort % m_host->getId().toBase58()).str());
             m_localAddress = (boost::format("/ip4/%s/tcp/%d/p2p/%s") % GetLocalIP(*m_context) % listeningPort % m_host->getId().toBase58()).str();
         //} else {
@@ -397,7 +397,7 @@ std::future<std::error_code> GossipPubSub::Start(
         //     libp2p::peer::PeerId::fromHash(cid.content_address).value();
          return dht_->FindProviders(cid, [=](libp2p::outcome::result<std::vector<libp2p::peer::PeerInfo>> res) {
             if (!res) {
-                std::cerr << "Cannot find providers: " << res.error().message() << std::endl;
+                m_logger->error("Cannot find providers: {}", res.error().message());
                 return false;
             }
             auto& providers = res.value();
@@ -422,7 +422,7 @@ std::future<std::error_code> GossipPubSub::Start(
             }
             else
             {
-                std::cout << "Empty providers list received" << std::endl;
+                m_logger->warn("Empty providers list received for CID");
                 //StartFindingPeersWithRetry(ioc, cid, filename, addressoffset, parse, save, handle_read, status);
                 std::chrono::seconds interval(120);
                 ScheduleNextFind(cid, interval);
@@ -439,7 +439,7 @@ std::future<std::error_code> GossipPubSub::Start(
         //     libp2p::peer::PeerId::fromHash(cid.content_address).value();
         return dht_->FindProviders(key, [=](libp2p::outcome::result<std::vector<libp2p::peer::PeerInfo>> res) {
             if (!res) {
-                std::cerr << "Cannot find providers: " << res.error().message() << std::endl;
+                m_logger->error("Cannot find providers: {}", res.error().message());
                 return false;
             }
             auto& providers = res.value();
@@ -449,10 +449,10 @@ std::future<std::error_code> GossipPubSub::Start(
                 auto& conn_mgr = m_host->getNetwork().getConnectionManager();
                 
                 for (auto& provider : providers) {
-                    std::cout << "New Peer: " << provider.id.toBase58() << std::endl;
+                    m_logger->info("DHT: New Peer: {}", provider.id.toBase58());
                     for(auto& provaddr : provider.addresses)           
                     {
-                        std::cout << provaddr.getStringAddress() << std::endl;
+                        m_logger->debug("DHT: Provider address: {}", provaddr.getStringAddress());
 
                     }
                     if(provider.id != m_host->getId())
@@ -470,7 +470,7 @@ std::future<std::error_code> GossipPubSub::Start(
             }
             else
             {
-                std::cout << "Empty providers list received" << std::endl;
+                m_logger->warn("DHT: Empty providers list received for key");
                 //StartFindingPeersWithRetry(ioc, cid, filename, addressoffset, parse, save, handle_read, status);
                 std::chrono::seconds interval(120);
                 ScheduleNextFind(key, interval);
@@ -488,7 +488,7 @@ std::future<std::error_code> GossipPubSub::Start(
             if (!ec) {
                 StartFindingPeers(cid);
             } else {
-                std::cerr << "Timer error: " << ec.message() << std::endl;
+                m_logger->error("DHT: Timer error: {}", ec.message());
             }
         });
     }
@@ -497,14 +497,14 @@ std::future<std::error_code> GossipPubSub::Start(
         if (!m_timer) {
             m_timer = std::make_shared<boost::asio::steady_timer>(*m_context);
         }
-        std::cout << "Schedule Next Find" << std::endl;
+        m_logger->debug("DHT: Schedule Next Find");
         m_timer->expires_after(interval);
         m_timer->async_wait([=](const boost::system::error_code& ec) {
             if (!ec) {
-                std::cout << "Start Next Find" << std::endl;
+                m_logger->debug("DHT: Start Next Find");
                 StartFindingPeers(cid);
             } else {
-                std::cerr << "Timer error: " << ec.message() << std::endl;
+                m_logger->error("DHT: Timer error: {}", ec.message());
             }
         });
     }
@@ -947,6 +947,39 @@ std::future<std::error_code> GossipPubSub::Start(
         for (const auto& addr : interface_addresses) {
             m_logger->info("  -> {}", addr.getStringAddress());
         }
+
+        // DEBUG: Show raw observed address data before filtering
+        m_logger->info("=== RAW OBSERVED ADDRESS DEBUG ===");
+        auto& obs_repo = m_host->getObservedRepository();
+        
+        // Get all listening addresses to check what's been observed for each
+        auto all_listen_addrs = m_host->getAddresses();
+        auto all_interface_addrs = m_host->getAddressesInterfaces();
+        
+        std::set<libp2p::multi::Multiaddress> all_local_addrs;
+        all_local_addrs.insert(all_listen_addrs.begin(), all_listen_addrs.end());
+        all_local_addrs.insert(all_interface_addrs.begin(), all_interface_addrs.end());
+        
+        for (const auto& local_addr : all_local_addrs) {
+            auto raw_observed_for_addr = obs_repo.getAddressesFor(local_addr, false); // Get all, even unconfirmed
+            auto activated_observed_for_addr = obs_repo.getAddressesFor(local_addr, true); // Get only confirmed/activated
+            m_logger->info("Local address: {} -> {} raw observed, {} activated", 
+                local_addr.getStringAddress(), raw_observed_for_addr.size(), activated_observed_for_addr.size());
+            for (const auto& obs_addr : raw_observed_for_addr) {
+                m_logger->info("  RAW: {}", obs_addr.getStringAddress());
+            }
+            for (const auto& obs_addr : activated_observed_for_addr) {
+                m_logger->info("  ACTIVATED: {}", obs_addr.getStringAddress());
+            }
+        }
+        
+        // Also check the total count
+        auto total_raw_observed = obs_repo.getAllAddresses(false);
+        auto total_activated_observed = obs_repo.getAllAddresses(true);
+        m_logger->info("TOTAL: {} raw observed addresses, {} activated addresses", 
+            total_raw_observed.size(), total_activated_observed.size());
+            
+        m_logger->info("=== END RAW OBSERVED ADDRESS DEBUG ===");
         
         auto observed_addresses = m_host->getObservedAddressesReal(false);
         m_logger->info("Observed addresses - all ({}):", observed_addresses.size());
@@ -988,6 +1021,7 @@ std::future<std::error_code> GossipPubSub::Start(
         auto& conn_mgr = m_host->getNetwork().getConnectionManager();
         auto connections = conn_mgr.getConnections();
         m_logger->info("Active connections: {}", connections.size());
+        m_logger->info("=== PEER CONNECTION DETAILS ===");
         
         for (const auto& conn : connections) {
             auto remote_peer = conn->remotePeer();
@@ -998,6 +1032,11 @@ std::future<std::error_code> GossipPubSub::Start(
                              remote_addr.value().getStringAddress());
             }
         }
+        
+        // Connection activation threshold explanation
+        m_logger->info("NOTE: Observed addresses need to be seen by 4+ different peer groups to become 'activated'");
+        m_logger->info("NOTE: Current connections: {}, so max possible observers: {}", connections.size(), connections.size());
+        m_logger->info("=== END PEER CONNECTION DETAILS ===");
         
         // Log connection manager stats
         m_logger->info("Connection manager stats:");
