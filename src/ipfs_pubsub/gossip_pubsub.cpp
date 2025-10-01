@@ -132,7 +132,7 @@ auto makeCustomHostInjector(std::optional<libp2p::crypto::KeyPair> keyPair, Ts &
     kademlia_config.randomWalk.timeout = std::chrono::seconds(3);     // Short timeout for random walks
     kademlia_config.randomWalk.delay = std::chrono::seconds(60);      // Long delay between queries
     
-    kademlia_config.requestConcurency = 1;                           // Keep single concurrent request
+    kademlia_config.requestConcurency = 3;                           // Keep single concurrent request
     kademlia_config.maxProvidersPerKey = 300;                        // Keep provider finding effective
     kademlia_config.maxBucketSize = 10;                              // Smaller than default 20, bigger than original 5
     kademlia_config.closerPeerCount = 5;                             // Reduce search scope (was 6 default)
@@ -961,22 +961,22 @@ std::future<std::error_code> GossipPubSub::Start(
         all_local_addrs.insert(all_interface_addrs.begin(), all_interface_addrs.end());
         
         for (const auto& local_addr : all_local_addrs) {
-            auto raw_observed_for_addr = obs_repo.getAddressesFor(local_addr, false); // Get all, even unconfirmed
-            auto activated_observed_for_addr = obs_repo.getAddressesFor(local_addr, true); // Get only confirmed/activated
-            m_logger->info("Local address: {} -> {} raw observed, {} activated", 
+            auto raw_observed_for_addr = obs_repo.getAddressesFor(local_addr, false); // Get all raw addresses
+            auto activated_observed_for_addr = obs_repo.getAddressesFor(local_addr, true); // Get only activated and confirmed
+            m_logger->info("Local address: {} -> {} raw observed, {} activated+confirmed", 
                 local_addr.getStringAddress(), raw_observed_for_addr.size(), activated_observed_for_addr.size());
             for (const auto& obs_addr : raw_observed_for_addr) {
                 m_logger->info("  RAW: {}", obs_addr.getStringAddress());
             }
             for (const auto& obs_addr : activated_observed_for_addr) {
-                m_logger->info("  ACTIVATED: {}", obs_addr.getStringAddress());
+                m_logger->info("  ACTIVATED+CONFIRMED: {}", obs_addr.getStringAddress());
             }
         }
         
         // Also check the total count
         auto total_raw_observed = obs_repo.getAllAddresses(false);
         auto total_activated_observed = obs_repo.getAllAddresses(true);
-        m_logger->info("TOTAL: {} raw observed addresses, {} activated addresses", 
+        m_logger->info("TOTAL: {} raw observed addresses, {} activated+confirmed addresses", 
             total_raw_observed.size(), total_activated_observed.size());
             
         m_logger->info("=== END RAW OBSERVED ADDRESS DEBUG ===");
