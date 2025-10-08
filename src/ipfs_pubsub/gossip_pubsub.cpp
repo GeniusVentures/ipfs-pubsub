@@ -4,6 +4,8 @@
 #include <boost/format.hpp>
 #include <libp2p/injector/host_injector.hpp>
 #include <libp2p/injector/kademlia_injector.hpp>
+#include <libp2p/injector/network_injector.hpp>
+#include <libp2p/protocol/factory/protocol_factory.hpp>
 #include <libp2p/security/noise.hpp>
 
 #include <boost/di/extension/scopes/shared.hpp>
@@ -173,6 +175,16 @@ auto makeCustomHostInjector(std::optional<libp2p::crypto::KeyPair> keyPair, Ts &
             libp2p::injector::useKademliaConfig(kademlia_config)),
         // Configure security to only support Noise (no plaintext)
         libp2p::injector::useSecurityAdaptors<libp2p::security::Noise>(),
+        // Configure protocols - only enable identify for now
+        []() {
+            libp2p::injector::ProtocolConfig config;
+            config.enable_identify = true;
+            config.enable_autonat = false;
+            config.enable_relay = false;
+            config.enable_holepunch_server = false;
+            config.enable_holepunch_client = false;
+            return libp2p::injector::useProtocolConfig(config);
+        }(),
         std::forward<decltype(args)>(args)...);
 
     return injector;
@@ -239,23 +251,24 @@ namespace sgns::ipfs_pubsub
                 //Initialize DHT
         dht_ = std::make_shared<sgns::ipfs_lite::ipfs::dht::IpfsDHT>(kademlia, bootstrapAddresses_,m_context);
 
-        //Make Holepunch Client
-        // m_holepunchmsgproc = std::make_shared<libp2p::protocol::HolepunchClientMsgProc>(*m_host, m_host->getNetwork().getConnectionManager());
         // m_holepunch = std::make_shared<libp2p::protocol::HolepunchClient>(*m_host, m_holepunchmsgproc, m_host->getBus());
         // m_holepunch->start();
-        //Make Identify
-        m_identifymsgproc = std::make_shared<libp2p::protocol::IdentifyMessageProcessor>(
-            *m_host, m_host->getNetwork().getConnectionManager(), *injector.create<std::shared_ptr<libp2p::peer::IdentityManager>>(), injector.create<std::shared_ptr<libp2p::crypto::marshaller::KeyMarshaller>>());
-        m_identify = std::make_shared<libp2p::protocol::Identify>(*m_host, m_identifymsgproc, m_host->getBus(), injector.create<std::shared_ptr<libp2p::transport::Upgrader>>(), [this]() { this->StartProvidingCID(); });       
-        m_identify->start();
-		// m_autonatmsgproc = std::make_shared<libp2p::protocol::AutonatMessageProcessor>(
-        //      *m_host, m_host->getNetwork().getConnectionManager(), *injector.create<std::shared_ptr<libp2p::peer::IdentityManager>>(), injector.create<std::shared_ptr<libp2p::crypto::marshaller::KeyMarshaller>>());
-		// m_autonat = std::make_shared<libp2p::protocol::Autonat>(*m_host, m_autonatmsgproc, m_host->getBus());  
-		// m_autonat->start();
-        // m_holepunchmsgproc = std::make_shared<libp2p::protocol::HolepunchMessageProcessor>(
-        //       *m_host, m_host->getNetwork().getConnectionManager());
-		// m_holepunch = std::make_shared<libp2p::protocol::Holepunch>(*m_host, m_holepunchmsgproc, m_host->getBus());  
-		//m_autonat->start();
+        
+        // Create protocols using factory with injector configuration
+        auto protocol_config = injector.create<libp2p::injector::ProtocolConfig>();
+        auto protocols = libp2p::protocol::factory::ProtocolFactory::createProtocols(m_host, protocol_config, injector);
+        
+        // Store protocol references
+        m_identify = protocols.identify;
+        // m_autonat = protocols.autonat;  // Uncomment if needed
+        // m_relay = protocols.relay;      // Uncomment if needed
+        // m_holepunch_server = protocols.holepunch_server;  // Uncomment if needed
+        // m_holepunch_client = protocols.holepunch_client;  // Uncomment if needed
+        
+        // Start protocols that were created
+        if (m_identify) {
+            m_identify->start();
+        }
     }
 
 std::future<std::error_code> GossipPubSub::Start(
