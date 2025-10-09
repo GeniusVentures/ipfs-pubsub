@@ -175,16 +175,6 @@ auto makeCustomHostInjector(std::optional<libp2p::crypto::KeyPair> keyPair, Ts &
             libp2p::injector::useKademliaConfig(kademlia_config)),
         // Configure security to only support Noise (no plaintext)
         libp2p::injector::useSecurityAdaptors<libp2p::security::Noise>(),
-        // Configure protocols - only enable identify for now
-        []() {
-            libp2p::injector::ProtocolConfig config;
-            config.enable_identify = true;
-            config.enable_autonat = false;
-            config.enable_relay = false;
-            config.enable_holepunch_server = false;
-            config.enable_holepunch_client = false;
-            return libp2p::injector::useProtocolConfig(config);
-        }(),
         std::forward<decltype(args)>(args)...);
 
     return injector;
@@ -254,8 +244,14 @@ namespace sgns::ipfs_pubsub
         // m_holepunch = std::make_shared<libp2p::protocol::HolepunchClient>(*m_host, m_holepunchmsgproc, m_host->getBus());
         // m_holepunch->start();
         
-        // Create protocols using factory with injector configuration
-        auto protocol_config = injector.create<libp2p::injector::ProtocolConfig>();
+        // Create protocols using factory with custom configuration
+        libp2p::protocol::factory::ProtocolFactory::ProtocolConfig protocol_config;
+        protocol_config.enable_identify = true;
+        protocol_config.enable_autonat = true;
+        protocol_config.enable_relay = false;
+        protocol_config.enable_holepunch_server = false;
+        protocol_config.enable_holepunch_client = false;
+
         auto protocols = libp2p::protocol::factory::ProtocolFactory::createProtocols(m_host, protocol_config, injector);
         
         // Store protocol references
