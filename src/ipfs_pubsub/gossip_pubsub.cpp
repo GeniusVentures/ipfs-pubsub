@@ -422,7 +422,7 @@ std::future<std::error_code> GossipPubSub::Start(
                         conn_mgr.protectPeer(provider.id, "dht-provider");
                         conn_mgr.tagPeer(provider.id, "content-provider", 500);  // High value tag
                         
-                        m_gossip->addBootstrapPeer(provider.id, provider.addresses[0]);   
+                        m_gossip->addBootstrapPeer(provider.id, provider.addresses);   
                     }         
                 }
                 std::chrono::seconds interval(120);
@@ -470,7 +470,7 @@ std::future<std::error_code> GossipPubSub::Start(
                         conn_mgr.protectPeer(provider.id, "dht-provider");
                         conn_mgr.tagPeer(provider.id, "content-provider", 500);  // High value tag
                         
-                        m_gossip->addBootstrapPeer(provider.id, provider.addresses[0]);
+                        m_gossip->addBootstrapPeer(provider.id, provider.addresses);
                     }
                 }
                 std::chrono::seconds interval(120);
