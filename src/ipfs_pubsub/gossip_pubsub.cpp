@@ -251,11 +251,6 @@ namespace sgns::ipfs_pubsub
         protocol_config.enable_relay = false;
         protocol_config.enable_holepunch_server = false;
         protocol_config.enable_holepunch_client = false;
-        
-        // Set callback for autonat - will be called when autonat completes
-        protocol_config.autonat_callback = [this]() { 
-            this->StartProvidingCID(); 
-        };
 
         auto protocols = libp2p::protocol::factory::ProtocolFactory::createProtocols(m_host, protocol_config, injector);
         
