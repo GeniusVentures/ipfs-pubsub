@@ -187,13 +187,11 @@ namespace sgns::ipfs_pubsub
         // std::shared_ptr<libp2p::protocol::AutonatMessageProcessor> m_autonatmsgproc;
         std::shared_ptr<libp2p::protocol::HolepunchClient> m_holepunch;
         std::shared_ptr<libp2p::protocol::HolepunchClientMsgProc> m_holepunchmsgproc;
-        static constexpr std::size_t kDefaultIoThreads = 4;
         std::shared_ptr<boost::asio::io_context> m_context;
         std::unique_ptr<boost::asio::io_context::strand> m_strand;
         std::shared_ptr<libp2p::Host> m_host;
         std::shared_ptr<libp2p::protocol::gossip::Gossip> m_gossip;
-        std::vector<std::thread> m_threads;
-        std::size_t m_io_thread_count = kDefaultIoThreads;
+        std::thread m_thread;
         std::string m_localAddress;
         std::vector<libp2p::multi::Multiaddress> m_localAddressAdditional;
         std::shared_ptr<boost::asio::steady_timer> m_timer;
@@ -211,7 +209,6 @@ namespace sgns::ipfs_pubsub
         void onNetworkChange();
         std::vector<std::string> getCurrentNetworkInterfaces();
         void logCurrentNetworkState();
-        bool isCurrentIoThread() const;
             //Default Bootstrap Servers
         std::vector<std::string> bootstrapAddresses_ = {
             //"/dnsaddr/bootstrap.libp2p.io/ipfs/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
@@ -242,7 +239,7 @@ namespace sgns::ipfs_pubsub
     inline bool GossipPubSub::IsStarted() const
     {
         // The context was not stopped and working thread started
-        return (m_context && !m_context->stopped() && !m_threads.empty());
+        return (m_context && !m_context->stopped() && m_thread.joinable());
     }
 
     inline const std::string& GossipPubSub::GetLocalAddress()

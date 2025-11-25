@@ -387,12 +387,7 @@ std::future<std::error_code> GossipPubSub::Start(
                 }
             });
 
-            m_threads.clear();
-            m_threads.reserve(m_io_thread_count);
-            for (std::size_t i = 0; i < m_io_thread_count; ++i)
-            {
-                m_threads.emplace_back([this]() { m_context->run(); });
-            }
+            m_thread = std::thread([this]() { m_context->run(); });
 
             if (m_context->stopped())
             {
@@ -650,38 +645,20 @@ std::future<std::error_code> GossipPubSub::Start(
             m_context->stop();
         }
 
-        // Wait for all worker threads to complete
-        auto this_id = std::this_thread::get_id();
-        for (auto &t : m_threads) {
-            if (t.joinable() && t.get_id() != this_id) {
-                t.join();
-            }
+        // Wait for the thread to complete
+        if (m_thread.joinable()) {
+            m_thread.join();
         }
-        // If Stop was called from a worker thread, leave self-join to caller
-        m_threads.clear();
     }
 
 
 
     void GossipPubSub::Wait()
     {
-        auto this_id = std::this_thread::get_id();
-        for (auto &t : m_threads) {
-            if (t.joinable() && t.get_id() != this_id) {
-                t.join();
-            }
+        if (!(m_thread.get_id() == std::this_thread::get_id()) && m_thread.joinable())
+        {
+            m_thread.join();
         }
-    }
-
-    bool GossipPubSub::isCurrentIoThread() const
-    {
-        auto this_id = std::this_thread::get_id();
-        for (const auto &t : m_threads) {
-            if (t.get_id() == this_id) {
-                return true;
-            }
-        }
-        return false;
     }
 
     std::shared_future<std::shared_ptr<GossipPubSub::Subscription>> GossipPubSub::Subscribe(const std::string& topic, MessageCallback onMessageCallback)
@@ -701,7 +678,7 @@ std::future<std::error_code> GossipPubSub::Start(
             }
         };
 
-        if (isCurrentIoThread())
+        if (m_thread.get_id() == std::this_thread::get_id())
         {
             subsF();
         }
