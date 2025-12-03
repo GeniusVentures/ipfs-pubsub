@@ -598,6 +598,11 @@ std::future<std::error_code> GossipPubSub::Start(
         if (m_timer) {
             m_timer->cancel();
         }
+        
+        // Cancel batch timer
+        if (m_batch_timer) {
+            m_batch_timer->cancel();
+        }
 
         // Use a promise/future to wait for actual shutdown completion
         std::promise<void> shutdownPromise;
@@ -700,14 +705,92 @@ std::future<std::error_code> GossipPubSub::Start(
     {
         m_strand->post([topic, message, this]()
         {
-            m_gossip->publish({ topic }, message);
+            m_gossip->publish(topic, message);
             if (m_logger->should_log(spdlog::level::debug))
             {
                 m_logger->debug(
                     (boost::format("%s: Message published to topic '%s'")
-                        % m_localAddress[0] % topic).str());
+                        % m_localAddress % topic).str());
             }
         });
+    }
+
+    void GossipPubSub::PublishBuffered(const std::string& topic, const std::vector<uint8_t>& message)
+    {
+        m_strand->post([topic, message, this]()
+        {
+            // Add to pending messages
+            m_pending_messages.push_back({topic, message});
+            
+            // Schedule flush if not already scheduled
+            if (!m_batch_timer_active) {
+                scheduleBatchFlush();
+            }
+        });
+    }
+
+    void GossipPubSub::PublishBatch(const std::vector<std::pair<std::string, std::vector<uint8_t>>>& messages)
+    {
+        if (messages.empty()) {
+            return;
+        }
+        
+        m_strand->post([messages, this]()
+        {
+            for (const auto& [topic, message] : messages)
+            {
+                m_gossip->publish(topic, message);
+                if (m_logger->should_log(spdlog::level::debug))
+                {
+                    m_logger->debug(
+                        (boost::format("%s: Message published to topic '%s'")
+                            % m_localAddress % topic).str());
+                }
+            }
+        });
+    }
+
+    void GossipPubSub::scheduleBatchFlush()
+    {
+        if (!m_batch_timer) {
+            m_batch_timer = std::make_shared<boost::asio::steady_timer>(*m_context);
+        }
+        
+        m_batch_timer_active = true;
+        m_batch_timer->expires_after(m_batch_window);
+        m_batch_timer->async_wait([this](const boost::system::error_code& ec) {
+            if (!ec && !m_context->stopped()) {
+                m_strand->post([this]() {
+                    flushPendingMessages();
+                });
+            }
+        });
+    }
+
+    void GossipPubSub::flushPendingMessages()
+    {
+        if (m_pending_messages.empty()) {
+            m_batch_timer_active = false;
+            return;
+        }
+        
+        // Move pending messages to local variable to avoid reentrant issues
+        std::vector<PendingMessage> messages_to_send;
+        messages_to_send.swap(m_pending_messages);
+        m_batch_timer_active = false;
+        
+        // Publish all batched messages
+        for (const auto& pending : messages_to_send)
+        {
+            m_gossip->publish(pending.topic, pending.message);
+        }
+        
+        if (m_logger->should_log(spdlog::level::debug))
+        {
+            m_logger->debug(
+                (boost::format("%s: Flushed %d batched messages")
+                    % m_localAddress % messages_to_send.size()).str());
+        }
     }
 
     std::shared_ptr<boost::asio::io_context> GossipPubSub::GetAsioContext() const
