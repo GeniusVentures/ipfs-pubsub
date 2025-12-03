@@ -78,6 +78,20 @@ namespace sgns::ipfs_pubsub
         */
         void Publish(const std::string& topic, const std::vector<uint8_t>& message);
 
+        /** Publish a message with automatic batching (5ms aggregation window).
+        * Messages are collected and sent together to reduce overhead when publishing
+        * to many topics rapidly. Use this instead of Publish() for high-throughput scenarios.
+        * @param topic - a topic to publish a message to.
+        * @param message - published message
+        */
+        void PublishBuffered(const std::string& topic, const std::vector<uint8_t>& message);
+
+        /** Publish multiple messages at once (batch operation).
+        * More efficient than calling Publish() multiple times as it uses a single strand post.
+        * @param messages - vector of (topic, message) pairs to publish
+        */
+        void PublishBatch(const std::vector<std::pair<std::string, std::vector<uint8_t>>>& messages);
+
         /** Starts the gossip pubsub service.
         * @param listeningPort - is a port for incoming connections.
         * @param booststrapPeers - a list of remote peers that are connected to the current mesh
@@ -201,6 +215,20 @@ namespace sgns::ipfs_pubsub
         
         // Address monitoring and peer management
         std::shared_ptr<boost::asio::steady_timer> m_address_monitor_timer;
+        
+        // Message batching for high-throughput scenarios
+        struct PendingMessage {
+            std::string topic;
+            std::vector<uint8_t> message;
+        };
+        std::vector<PendingMessage> m_pending_messages;
+        std::shared_ptr<boost::asio::steady_timer> m_batch_timer;
+        std::chrono::milliseconds m_batch_window{5};  // 5ms aggregation window
+        bool m_batch_timer_active{false};
+        
+        // Message batching methods
+        void flushPendingMessages();
+        void scheduleBatchFlush();
         
         // Address management methods
         void startAddressMonitoring();
