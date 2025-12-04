@@ -666,6 +666,21 @@ std::future<std::error_code> GossipPubSub::Start(
         }
     }
 
+    std::string GossipPubSub::GetInterfaceAddress()
+    {
+        if (!m_host) {
+            return "";
+        }
+        
+        auto interface_addresses = m_host->getAddressesInterfaces();
+        if (interface_addresses.empty()) {
+            return "";
+        }
+        
+        // Return the first interface address with the peer ID appended
+        return std::string(interface_addresses[0].getStringAddress()) + "/ipfs/" + m_host->getId().toBase58();
+    }
+
     std::shared_future<std::shared_ptr<GossipPubSub::Subscription>> GossipPubSub::Subscribe(const std::string& topic, MessageCallback onMessageCallback)
     {
         auto subscription = std::make_shared<std::promise<std::shared_ptr<GossipPubSub::Subscription>>>();
