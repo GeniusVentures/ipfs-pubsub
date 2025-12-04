@@ -119,6 +119,11 @@ namespace sgns::ipfs_pubsub
         */
         const std::string& GetLocalAddress();
 
+        /** Returns the actual interface address with peer ID for bootstrapping.
+        * @return a string representation of the interface address + /ipfs/<peerID>
+        */
+        std::string GetInterfaceAddress();
+
         /** Returns an asio context that is used for gossip protocol handling.
         * @return the asio context
         */
