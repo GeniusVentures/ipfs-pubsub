@@ -143,9 +143,9 @@ auto makeCustomHostInjector(std::optional<libp2p::crypto::KeyPair> keyPair, Ts &
     kademlia_config.responseTimeout = std::chrono::seconds(2);       // Very fast response timeout (was 10s)
     kademlia_config.connectionTimeout = std::chrono::seconds(1);     // Very fast connection timeout (was 3s)
     
-    // More aggressive provider record cleanup
-    kademlia_config.providerRecordTTL = std::chrono::seconds(300);   // 5 minutes (was 24h)
-    kademlia_config.providerWipingInterval = std::chrono::seconds(60); // Clean every minute (was 1h)
+    // Provider record TTL - needs to be long enough for republishing
+    kademlia_config.providerRecordTTL = std::chrono::hours(24);   // 24 hours (standard IPFS)
+    kademlia_config.providerWipingInterval = std::chrono::hours(1); // Clean every hour
 
     auto csprng = std::make_shared<crypto::random::BoostRandomGenerator>();
     auto ed25519_provider = std::make_shared<crypto::ed25519::Ed25519ProviderImpl>();
@@ -532,9 +532,10 @@ std::future<std::error_code> GossipPubSub::Start(
     {
         for(auto& cid : m_provideCids)
         {
-            dht_->ProvideCID(cid, true);
+            // Use force=false to enable periodic re-providing
+            dht_->ProvideCID(cid, true, false);
         }
-        m_provideCids.clear();
+        // Don't clear m_provideCids - we need to keep them for periodic refresh
     }
 
     void GossipPubSub::AddPeers(const std::vector<std::string>& booststrapPeers)
@@ -830,7 +831,7 @@ std::future<std::error_code> GossipPubSub::Start(
     void GossipPubSub::refreshLocalAddresses()
     {
         m_logger->info("=== Address Refresh Cycle Started ===");
-        
+
         try {
             // Get current network interfaces
             auto current_interfaces = getCurrentNetworkInterfaces();
@@ -934,7 +935,8 @@ std::future<std::error_code> GossipPubSub::Start(
         if (!m_provideCids.empty()) {
             m_logger->info("Republishing {} CIDs to DHT after network change", m_provideCids.size());
             for (const auto& cid : m_provideCids) {
-                dht_->ProvideCID(cid, true);
+                // Use force=true for immediate republish, need_err=true, no automatic rescheduling
+                dht_->ProvideCID(cid, true, true);
             }
         }
         
