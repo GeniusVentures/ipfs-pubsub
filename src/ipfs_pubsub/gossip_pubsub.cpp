@@ -134,10 +134,10 @@ auto makeCustomHostInjector(std::optional<libp2p::crypto::KeyPair> keyPair, Ts &
     kademlia_config.randomWalk.timeout = std::chrono::seconds(3);     // Short timeout for random walks
     kademlia_config.randomWalk.delay = std::chrono::seconds(60);      // Long delay between queries
     
-    kademlia_config.requestConcurency = 3;                           // Keep single concurrent request
+    kademlia_config.requestConcurency = 1;                           // Single concurrent request only (was 3)
     kademlia_config.maxProvidersPerKey = 300;                        // Keep provider finding effective
     kademlia_config.maxBucketSize = 10;                              // Smaller than default 20, bigger than original 5
-    kademlia_config.closerPeerCount = 5;                             // Reduce search scope (was 6 default)
+    kademlia_config.closerPeerCount = 3;                             // Minimal search scope (was 5, default 6)
     
     // Aggressive connection cleanup timeouts
     kademlia_config.responseTimeout = std::chrono::seconds(2);       // Very fast response timeout (was 10s)
@@ -407,6 +407,7 @@ std::future<std::error_code> GossipPubSub::Start(
         const libp2p::multi::ContentIdentifier& cid
     )
     {
+        m_logger->info("DHT: Starting FindProviders for CID");
         // auto peer_id =
         //     libp2p::peer::PeerId::fromHash(cid.content_address).value();
          return dht_->FindProviders(cid, [=](libp2p::outcome::result<std::vector<libp2p::peer::PeerInfo>> res) {
@@ -438,7 +439,7 @@ std::future<std::error_code> GossipPubSub::Start(
             {
                 m_logger->warn("Empty providers list received for CID");
                 //StartFindingPeersWithRetry(ioc, cid, filename, addressoffset, parse, save, handle_read, status);
-                std::chrono::seconds interval(120);
+                std::chrono::seconds interval(300);  // 5 minutes (was 120s)
                 ScheduleNextFind(cid, interval);
                 return false;
             }
@@ -449,6 +450,7 @@ std::future<std::error_code> GossipPubSub::Start(
             const libp2p::protocol::kademlia::ContentId& key
         )
     {
+        m_logger->info("DHT: Starting FindProviders for ContentId key");
         // auto peer_id =
         //     libp2p::peer::PeerId::fromHash(cid.content_address).value();
         return dht_->FindProviders(key, [=](libp2p::outcome::result<std::vector<libp2p::peer::PeerInfo>> res) {
@@ -478,7 +480,7 @@ std::future<std::error_code> GossipPubSub::Start(
                         m_gossip->addBootstrapPeer(provider.id, provider.addresses);
                     }
                 }
-                std::chrono::seconds interval(120);
+                std::chrono::seconds interval(300);  // 5 minutes (was 120s)
                 ScheduleNextFind(key, interval);
                 return true;
             }
@@ -486,7 +488,7 @@ std::future<std::error_code> GossipPubSub::Start(
             {
                 m_logger->warn("DHT: Empty providers list received for key");
                 //StartFindingPeersWithRetry(ioc, cid, filename, addressoffset, parse, save, handle_read, status);
-                std::chrono::seconds interval(120);
+                std::chrono::seconds interval(300);  // 5 minutes (was 120s)
                 ScheduleNextFind(key, interval);
                 return false;
             }
