@@ -535,7 +535,7 @@ std::future<std::error_code> GossipPubSub::Start(
             // Use force=false to enable periodic re-providing
             dht_->ProvideCID(cid, true, false);
         }
-        // Don't clear m_provideCids - we need to keep them for periodic refresh
+        m_provideCids.clear();
     }
 
     void GossipPubSub::AddPeers(const std::vector<std::string>& booststrapPeers)
