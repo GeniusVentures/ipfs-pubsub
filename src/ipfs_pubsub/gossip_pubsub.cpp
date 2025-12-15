@@ -127,25 +127,6 @@ auto makeCustomHostInjector(std::optional<libp2p::crypto::KeyPair> keyPair, Ts &
     namespace di = boost::di;
 
     libp2p::protocol::kademlia::Config kademlia_config;
-    // Keep random walk for decentralization but make it very conservative
-    kademlia_config.randomWalk.enabled = true;
-    kademlia_config.randomWalk.interval = std::chrono::seconds(300);   // Every 5 minutes (was 30s default)
-    kademlia_config.randomWalk.queries_per_period = 1;               // Only 1 query per period
-    kademlia_config.randomWalk.timeout = std::chrono::seconds(3);     // Short timeout for random walks
-    kademlia_config.randomWalk.delay = std::chrono::seconds(60);      // Long delay between queries
-    
-    kademlia_config.requestConcurency = 1;                           // Single concurrent request only (was 3)
-    kademlia_config.maxProvidersPerKey = 300;                        // Keep provider finding effective
-    kademlia_config.maxBucketSize = 10;                              // Smaller than default 20, bigger than original 5
-    kademlia_config.closerPeerCount = 3;                             // Minimal search scope (was 5, default 6)
-    
-    // Aggressive connection cleanup timeouts
-    kademlia_config.responseTimeout = std::chrono::seconds(2);       // Very fast response timeout (was 10s)
-    kademlia_config.connectionTimeout = std::chrono::seconds(1);     // Very fast connection timeout (was 3s)
-    
-    // Provider record TTL - needs to be long enough for republishing
-    kademlia_config.providerRecordTTL = std::chrono::hours(24);   // 24 hours (standard IPFS)
-    kademlia_config.providerWipingInterval = std::chrono::hours(1); // Clean every hour
 
     auto csprng = std::make_shared<crypto::random::BoostRandomGenerator>();
     auto ed25519_provider = std::make_shared<crypto::ed25519::Ed25519ProviderImpl>();
