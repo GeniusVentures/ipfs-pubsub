@@ -1,5 +1,4 @@
-#ifndef IPFS_PUBSUB_LOGGER_HPP
-#define IPFS_PUBSUB_LOGGER_HPP
+#pragma once
 
 #include <spdlog/spdlog.h>
 
@@ -13,5 +12,3 @@ namespace sgns::ipfs_pubsub
     */
     Logger createLogger(const std::string& tag);
 }
-
-#endif  // IPFS_PUBSUB_LOGGER_HPP
