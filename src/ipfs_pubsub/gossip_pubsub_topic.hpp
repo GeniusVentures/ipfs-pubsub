@@ -1,5 +1,4 @@
-#ifndef IPFS_PUBSUB_GOSSIP_PUBSUB_TOPIC
-#define IPFS_PUBSUB_GOSSIP_PUBSUB_TOPIC
+#pragma once
 
 #include <ipfs_pubsub/gossip_pubsub.hpp>
 
@@ -73,5 +72,3 @@ private:
     std::shared_future<std::shared_ptr<Subscription>>     m_subscription;
 };
 }
-
-#endif // IPFS_PUBSUB_GOSSIP_PUBSUB_TOPIC

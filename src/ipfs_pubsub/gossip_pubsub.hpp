@@ -1,5 +1,4 @@
-#ifndef IPFS_PUBSUB_GOSSIP_PUBSUB
-#define IPFS_PUBSUB_GOSSIP_PUBSUB
+#pragma once
 
 #include <ipfs_pubsub/logger.hpp>
 
@@ -293,5 +292,3 @@ namespace sgns::ipfs_pubsub
 }
 
 OUTCOME_HPP_DECLARE_ERROR_2(sgns::ipfs_pubsub, GossipPubSubError);
-
-#endif // IPFS_PUBSUB_GOSSIP_PUBSUB
