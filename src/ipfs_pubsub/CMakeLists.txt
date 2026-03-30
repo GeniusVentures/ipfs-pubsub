@@ -25,7 +25,6 @@ target_link_libraries(ipfs-pubsub
     p2p::p2p_inmem_key_repository
     p2p::p2p_inmem_protocol_repository
     p2p::p2p_gossip
-    p2p::asio_scheduler
     p2p::p2p_kademlia
     p2p::p2p_identify
     p2p::p2p_autonat
