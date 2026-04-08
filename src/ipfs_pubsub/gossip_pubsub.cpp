@@ -1,5 +1,6 @@
 #include "ipfs_pubsub/gossip_pubsub.hpp"
 
+#include <boost/current_function.hpp>
 #include <iostream>
 #include <boost/format.hpp>
 #include <libp2p/injector/host_injector.hpp>
@@ -138,7 +139,7 @@ namespace
     }
 
     template <typename... Ts>
-    auto makeCustomHostInjector( std::optional<libp2p::crypto::KeyPair> keyPair, Ts &&...args )
+    auto MakeCustomHostInjector( std::optional<libp2p::crypto::KeyPair> keyPair, Ts &&...args )
     {
         using namespace libp2p;
         namespace di = boost::di;
@@ -185,37 +186,34 @@ namespace
 
 namespace sgns::ipfs_pubsub
 {
-    std::string GossipPubSub::FormatPeerId( const std::vector<uint8_t> &bytes )
+    std::string GossipPubSub::FormatPeerId( const std::vector<uint8_t> &peerId )
     {
-        auto res = libp2p::peer::PeerId::fromBytes( bytes );
+        auto res = libp2p::peer::PeerId::fromBytes( peerId );
         return res ? res.value().toBase58().substr( 46 ) : "???";
     }
 
     GossipPubSub::GossipPubSub() : GossipPubSub( GetDefaultConfig() ) {}
 
-    GossipPubSub::GossipPubSub( const libp2p::protocol::gossip::Config &config ) : config_( config )
+    GossipPubSub::GossipPubSub( libp2p::protocol::gossip::Config config ) : config_( std::move( config ) )
     {
         Init( std::optional<libp2p::crypto::KeyPair>() );
     }
 
-    GossipPubSub::GossipPubSub( libp2p::crypto::KeyPair keyPair ) : GossipPubSub( keyPair, GetDefaultConfig() ) {}
+    GossipPubSub::GossipPubSub( libp2p::crypto::KeyPair keyPair ) :
+        GossipPubSub( std::move( keyPair ), GetDefaultConfig() )
+    {
+    }
 
-    GossipPubSub::GossipPubSub( libp2p::crypto::KeyPair keyPair, const libp2p::protocol::gossip::Config &config ) :
-        config_( config )
+    GossipPubSub::GossipPubSub( libp2p::crypto::KeyPair keyPair, libp2p::protocol::gossip::Config config ) :
+        config_( std::move( config ) )
     {
         Init( std::move( keyPair ) );
     }
 
     void GossipPubSub::Init( std::optional<libp2p::crypto::KeyPair> keyPair )
     {
-        //Init Provid CIDs
-        m_provideCids = std::vector<libp2p::protocol::kademlia::ContentId>();
-
-        // Objects creating
-
         // Injector creates and ties dependent objects
-        //auto injector = libp2p::injector::makeHostInjector();// std::move(keyPair));
-        auto injector = makeCustomHostInjector( std::move( keyPair ) );
+        auto injector = MakeCustomHostInjector( std::move( keyPair ) );
 
         // Create asio context
         m_context = injector.create<std::shared_ptr<boost::asio::io_context>>();
@@ -235,7 +233,6 @@ namespace sgns::ipfs_pubsub
 
         //Make a DHT
         auto kademlia = injector.create<std::shared_ptr<libp2p::protocol::kademlia::Kademlia>>();
-        //Initialize DHT
         dht_ = std::make_shared<sgns::ipfs_lite::ipfs::dht::IpfsDHT>( kademlia, bootstrapAddresses_, m_context );
 
         // Create protocols using factory with custom configuration
@@ -323,77 +320,75 @@ namespace sgns::ipfs_pubsub
             result->set_value( GossipPubSubError::INVALID_LOCAL_ADDRESS );
             return result->get_future();
         }
-        else
-        {
-            // Start the node as soon as async engine starts
-            m_strand->post(
-                [result, peerInfo, this]
-                {
-                    auto listen_res = m_host->listen( peerInfo->addresses[0] );
-                    if ( !listen_res )
-                    {
-                        m_context->stop();
-                        m_logger->error( "Cannot listen to multiaddress: {}, detais {}",
-                                         peerInfo->addresses[0].getStringAddress(),
-                                         listen_res.error().message() );
 
-                        result->set_value( GossipPubSubError::FAILED_LOCAL_ADDRESS_LISTENING );
+        // Start the node as soon as async engine starts
+        m_strand->post(
+            [result, peerInfo, this]
+            {
+                auto listen_res = m_host->listen( peerInfo->addresses[0] );
+                if ( !listen_res )
+                {
+                    m_context->stop();
+                    m_logger->error( "Cannot listen to multiaddress: {}, detais {}",
+                                     peerInfo->addresses[0].getStringAddress(),
+                                     listen_res.error().message() );
+
+                    result->set_value( GossipPubSubError::FAILED_LOCAL_ADDRESS_LISTENING );
+                    return;
+                }
+
+                // Adding LAN and WAN addresses to the local peer with appropriate TTL
+                if ( m_localAddressAdditional.size() > 0 )
+                {
+                    m_logger->info( "Adding {} additional local addresses with TTL=10min (kRecentlyConnected)",
+                                    m_localAddressAdditional.size() );
+                    for ( const auto &addr : m_localAddressAdditional )
+                    {
+                        m_logger->info( "  -> Additional address: {}", addr.getStringAddress() );
+                    }
+
+                    // Use kRecentlyConnected (10 minutes) instead of kPermanent for dynamic addresses
+                    auto result = m_host->getPeerRepository().getAddressRepository().upsertAddresses(
+                        peerInfo->id,
+                        m_localAddressAdditional,
+                        libp2p::peer::ttl::kRecentlyConnected );
+
+                    if ( result )
+                    {
+                        m_logger->info( "Successfully added {} additional addresses to peer repository",
+                                        m_localAddressAdditional.size() );
                     }
                     else
                     {
-                        // Adding LAN and WAN addresses to the local peer with appropriate TTL
-                        if ( m_localAddressAdditional.size() > 0 )
-                        {
-                            m_logger->info( "Adding {} additional local addresses with TTL=10min (kRecentlyConnected)",
-                                            m_localAddressAdditional.size() );
-                            for ( const auto &addr : m_localAddressAdditional )
-                            {
-                                m_logger->info( "  -> Additional address: {}", addr.getStringAddress() );
-                            }
-
-                            // Use kRecentlyConnected (10 minutes) instead of kPermanent for dynamic addresses
-                            auto result = m_host->getPeerRepository().getAddressRepository().upsertAddresses(
-                                peerInfo->id,
-                                m_localAddressAdditional,
-                                libp2p::peer::ttl::kRecentlyConnected );
-
-                            if ( result )
-                            {
-                                m_logger->info( "Successfully added {} additional addresses to peer repository",
-                                                m_localAddressAdditional.size() );
-                            }
-                            else
-                            {
-                                m_logger->error( "Failed to add additional addresses: {}", result.error().message() );
-                            }
-                        }
-
-                        // Start address monitoring and refresh system
-                        startAddressMonitoring();
-
-                        m_host->start();
-                        m_gossip->start();
-                        m_logger->info( ( boost::format( "%s : PubSub service started" ) % m_localAddress ).str() );
-                        result->set_value( std::error_code() );
+                        m_logger->error( "Failed to add additional addresses: {}", result.error().message() );
                     }
-                } );
-
-            m_thread = std::thread( [this]() { m_context->run(); } );
-
-            if ( m_context->stopped() )
-            {
-                auto errorMessage = ( boost::format( "%s: PubSub service failed to start" ) % m_localAddress ).str();
-                m_logger->error( errorMessage );
-                if ( !result->get_future().valid() )
-                {
-                    result->set_value( GossipPubSubError::FAILED_SERVICE_START );
                 }
+
+                // Start address monitoring and refresh system
+                startAddressMonitoring();
+
+                m_host->start();
+                m_gossip->start();
+                m_logger->info( ( boost::format( "%s : PubSub service started" ) % m_localAddress ).str() );
+                result->set_value( std::error_code() );
+            } );
+
+        m_thread = std::thread( [this]() { m_context->run(); } );
+
+        if ( m_context->stopped() )
+        {
+            auto error_message = ( boost::format( "%s: PubSub service failed to start" ) % m_localAddress ).str();
+            m_logger->error( error_message );
+            if ( !result->get_future().valid() )
+            {
+                result->set_value( GossipPubSubError::FAILED_SERVICE_START );
             }
         }
+
         return result->get_future();
     }
 
-    bool GossipPubSub::StartFindingPeers( const libp2p::multi::ContentIdentifier &cid )
+    libp2p::outcome::result<void> GossipPubSub::StartFindingPeers( const libp2p::multi::ContentIdentifier &cid )
     {
         m_logger->info( "DHT: Starting FindProviders for CID" );
 
@@ -427,17 +422,15 @@ namespace sgns::ipfs_pubsub
                     ScheduleNextFind( cid, interval );
                     return true;
                 }
-                else
-                {
-                    m_logger->warn( "Empty providers list received for CID" );
-                    std::chrono::seconds interval( 300 ); // 5 minutes (was 120s)
-                    ScheduleNextFind( cid, interval );
-                    return false;
-                }
+
+                m_logger->warn( "Empty providers list received for CID" );
+                std::chrono::seconds interval( 300 ); // 5 minutes (was 120s)
+                ScheduleNextFind( cid, interval );
+                return false;
             } );
     }
 
-    bool GossipPubSub::StartFindingPeers( const libp2p::protocol::kademlia::ContentId &key )
+    libp2p::outcome::result<void> GossipPubSub::StartFindingPeers( const libp2p::protocol::kademlia::ContentId &key )
     {
         m_logger->info( "DHT: Starting FindProviders for ContentId key" );
 
@@ -588,8 +581,7 @@ namespace sgns::ipfs_pubsub
             {
                 try
                 {
-                    auto shared_sub = subscription.get();
-                    if ( shared_sub )
+                    if ( auto shared_sub = subscription.get(); shared_sub )
                     {
                         shared_sub->cancel();
                     }
@@ -615,6 +607,11 @@ namespace sgns::ipfs_pubsub
         if ( m_batch_timer )
         {
             m_batch_timer->cancel();
+        }
+
+        if ( m_address_monitor_timer )
+        {
+            m_address_monitor_timer->cancel();
         }
 
         // Use a promise/future to wait for actual shutdown completion
@@ -675,7 +672,7 @@ namespace sgns::ipfs_pubsub
             m_context->stop();
         }
 
-        // Wait for the thread to complete
+        // Wait for the worker thread to complete
         if ( m_thread.joinable() )
         {
             m_thread.join();
@@ -1090,12 +1087,12 @@ namespace sgns::ipfs_pubsub
                 {
                     char host[NI_MAXHOST];
                     int  s = getnameinfo( ifa->ifa_addr,
-                                         sizeof( struct sockaddr_in ),
-                                         host,
-                                         NI_MAXHOST,
-                                         nullptr,
-                                         0,
-                                         NI_NUMERICHOST );
+                                          sizeof( struct sockaddr_in ),
+                                          host,
+                                          NI_MAXHOST,
+                                          nullptr,
+                                          0,
+                                          NI_NUMERICHOST );
                     if ( s == 0 )
                     {
                         int priority = GetIPPriority( host );
@@ -1106,7 +1103,7 @@ namespace sgns::ipfs_pubsub
 
                         if ( priority < 999 )
                         { // Valid non-loopback address
-                            interfaces.push_back( host );
+                            interfaces.emplace_back( host );
                         }
                     }
                 }

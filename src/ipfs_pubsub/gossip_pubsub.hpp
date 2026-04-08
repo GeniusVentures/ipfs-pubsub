@@ -2,6 +2,7 @@
 
 #include <ipfs_pubsub/logger.hpp>
 
+#include <libp2p/basic/scheduler.hpp>
 #include <string>
 #include <chrono>
 #include <unordered_map>
@@ -52,7 +53,7 @@ namespace sgns::ipfs_pubsub
          */
         GossipPubSub();
 
-        GossipPubSub( const libp2p::protocol::gossip::Config &config );
+        GossipPubSub( libp2p::protocol::gossip::Config config );
 
         /** Creates a gossip subscription service.
          * keyPair public / private key pair.
@@ -60,7 +61,7 @@ namespace sgns::ipfs_pubsub
          */
         GossipPubSub( libp2p::crypto::KeyPair keyPair );
 
-        GossipPubSub( libp2p::crypto::KeyPair keyPair, const libp2p::protocol::gossip::Config &config );
+        GossipPubSub( libp2p::crypto::KeyPair keyPair, libp2p::protocol::gossip::Config config );
 
         ~GossipPubSub();
 
@@ -141,12 +142,12 @@ namespace sgns::ipfs_pubsub
          * Find peers with the CID we are looking for using Kademlia DHT.
          * @param cid - IPFS Main CID to get from bitswap
           */
-        bool StartFindingPeers( const libp2p::multi::ContentIdentifier &cid );
+        libp2p::outcome::result<void> StartFindingPeers( const libp2p::multi::ContentIdentifier &cid );
         /**
          * Find peers with the CID we are looking for using Kademlia DHT.
          * @param key - IPFS Main CID to get from bitswap
           */
-        bool StartFindingPeers( const libp2p::protocol::kademlia::ContentId &key );
+        libp2p::outcome::result<void> StartFindingPeers( const libp2p::protocol::kademlia::ContentId &key );
 
         /**
          * Service to provide CID as addresses update
@@ -200,22 +201,19 @@ namespace sgns::ipfs_pubsub
             return config;
         }
 
-        std::shared_ptr<sgns::ipfs_lite::ipfs::dht::IpfsDHT>        dht_;
-        std::shared_ptr<libp2p::protocol::Identify>                 m_identify;
-        std::shared_ptr<libp2p::protocol::IdentifyMessageProcessor> m_identifymsgproc;
-        std::shared_ptr<libp2p::protocol::HolepunchClient>             m_holepunch;
-        std::shared_ptr<libp2p::protocol::HolepunchClientMsgProc>      m_holepunchmsgproc;
+        libp2p::protocol::gossip::Config                               config_;
         std::shared_ptr<boost::asio::io_context>                       m_context;
         std::unique_ptr<boost::asio::io_context::strand>               m_strand;
+        std::thread                                                    m_thread;
         std::shared_ptr<libp2p::Host>                                  m_host;
         std::shared_ptr<libp2p::protocol::gossip::Gossip>              m_gossip;
-        std::thread                                                    m_thread;
+        std::shared_ptr<sgns::ipfs_lite::ipfs::dht::IpfsDHT>           dht_;
+        std::shared_ptr<libp2p::protocol::Identify>                    m_identify;
+        std::shared_ptr<boost::asio::steady_timer>                     m_timer;
         std::string                                                    m_localAddress;
         std::vector<libp2p::multi::Multiaddress>                       m_localAddressAdditional;
-        std::shared_ptr<boost::asio::steady_timer>                     m_timer;
         std::vector<libp2p::protocol::kademlia::ContentId>             m_provideCids;
         std::vector<std::shared_future<std::shared_ptr<Subscription>>> m_subscriptions;
-        libp2p::protocol::gossip::Config                               config_;
 
         // Address monitoring and peer management
         std::shared_ptr<boost::asio::steady_timer> m_address_monitor_timer;
