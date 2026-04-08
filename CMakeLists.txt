@@ -2,13 +2,11 @@ cmake_minimum_required(VERSION 3.22)
 
 project(ipfs-pubsub LANGUAGES CXX)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 include(GNUInstallDirs)
 
-message("Protobuf_DIR " ${Protobuf_DIR})
-message("IPFS LITE DIR " ${ipfs-lite-cpp_DIR})
 find_package(Protobuf CONFIG REQUIRED)
-
-# libp2p and its dependencies
 find_package(spdlog CONFIG REQUIRED)
 find_package(libp2p CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)
