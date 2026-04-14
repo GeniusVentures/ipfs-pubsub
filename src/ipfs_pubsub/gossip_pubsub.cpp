@@ -277,10 +277,13 @@ namespace sgns::ipfs_pubsub
             return result->get_future();
         }
 
-        m_logger->debug( "Using default bind addresses" );
-        m_localAddress = ( boost::format( "/ip4/%s/tcp/%d/p2p/%s" ) % GetLocalIP( *m_context ) % listeningPort %
-                           m_host->getId().toBase58() )
-                             .str();
+        if (!bindAddresses.empty()) {
+            m_logger->debug("Using provided bind address: {}", bindAddresses);
+            m_localAddress = (boost::format("/ip4/%s/tcp/%d/p2p/%s") % bindAddresses % listeningPort % m_host->getId().toBase58()).str();
+        } else {
+            m_logger->debug("Using default bind address (GetLocalIP)");
+            m_localAddress = (boost::format("/ip4/%s/tcp/%d/p2p/%s") % GetLocalIP(*m_context) % listeningPort % m_host->getId().toBase58()).str();
+        }
 
         for ( const auto &address : addAddresses )
         {
