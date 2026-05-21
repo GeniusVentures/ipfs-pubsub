@@ -13,7 +13,7 @@ namespace sgns::ipfs_pubsub
     {
     public:
         using Message              = libp2p::protocol::gossip::Gossip::Message;
-        using Subscription         = libp2p::protocol::Subscription;
+        using Subscription         = GossipPubSub::Subscription;
         using SubscriptionCallback = libp2p::protocol::gossip::Gossip::SubscriptionCallback;
 
         /** Creates a gossip topic wrapper.
