@@ -217,7 +217,7 @@ namespace sgns::ipfs_pubsub
 
         // Create asio context
         m_context = injector.create<std::shared_ptr<boost::asio::io_context>>();
-        m_strand  = std::make_unique<boost::asio::io_context::strand>( *m_context );
+        m_strand  = std::make_shared<boost::asio::io_context::strand>( *m_context );
 
         // host is our local libp2p node
         m_host = injector.create<std::shared_ptr<libp2p::Host>>();
@@ -297,22 +297,6 @@ namespace sgns::ipfs_pubsub
         }
         m_logger->info( ( boost::format( "%s: Starting PubSub service" ) % m_localAddress ).str() );
 
-        // Tell gossip to connect to remote peers, only if specified
-        auto &conn_mgr = m_host->getNetwork().getConnectionManager();
-
-        for ( const auto &remotePeerAddress : booststrapPeers )
-        {
-            boost::optional<libp2p::peer::PeerInfo> remotePeerInfo = PeerInfoFromString( remotePeerAddress );
-            if ( remotePeerInfo )
-            {
-                // Protect bootstrap peers - they are manually configured important peers
-                conn_mgr.protectPeer( remotePeerInfo->id, "bootstrap-peer" );
-                conn_mgr.tagPeer( remotePeerInfo->id, "bootstrap", 300 ); // Medium-high value tag
-
-                m_gossip->addBootstrapPeer( remotePeerInfo->id, remotePeerInfo->addresses[0] );
-            }
-        }
-
         // Local address -> peer info
         boost::optional<libp2p::peer::PeerInfo> peerInfo = PeerInfoFromString( m_localAddress );
         if ( !peerInfo )
@@ -326,7 +310,7 @@ namespace sgns::ipfs_pubsub
 
         // Start the node as soon as async engine starts
         m_strand->post(
-            [result, peerInfo, this]
+            [result, peerInfo, booststrapPeers, this]
             {
                 auto listen_res = m_host->listen( peerInfo->addresses[0] );
                 if ( !listen_res )
@@ -372,6 +356,22 @@ namespace sgns::ipfs_pubsub
 
                 m_host->start();
                 m_gossip->start();
+                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                // Apply bootstrap peers only after host and gossip are fully started.
+                auto &conn_mgr = m_host->getNetwork().getConnectionManager();
+                for ( const auto &remotePeerAddress : booststrapPeers )
+                {
+                    boost::optional<libp2p::peer::PeerInfo> remotePeerInfo = PeerInfoFromString( remotePeerAddress );
+                    if ( remotePeerInfo )
+                    {
+                        // Protect bootstrap peers - they are manually configured important peers
+                        conn_mgr.protectPeer( remotePeerInfo->id, "bootstrap-peer" );
+                        conn_mgr.tagPeer( remotePeerInfo->id, "bootstrap", 300 ); // Medium-high value tag
+
+                        m_gossip->addBootstrapPeer( remotePeerInfo->id, remotePeerInfo->addresses[0] );
+                    }
+                }
+
                 m_logger->info( ( boost::format( "%s : PubSub service started" ) % m_localAddress ).str() );
                 result->set_value( std::error_code() );
             } );
@@ -707,6 +707,22 @@ namespace sgns::ipfs_pubsub
         return std::string( interface_addresses[0].getStringAddress() ) + "/ipfs/" + m_host->getId().toBase58();
     }
 
+    void GossipPubSub::Subscription::cancel()
+    {
+        auto inner = std::move( inner_ );
+        if ( !inner )
+        {
+            return;
+        }
+        if ( auto strand = strand_.lock() )
+        {
+            boost::asio::post( *strand, [inner = std::move( inner )]() mutable
+            {
+                inner->cancel();
+            } );
+        }
+    }
+
     std::shared_future<std::shared_ptr<GossipPubSub::Subscription>> GossipPubSub::Subscribe(
         const std::string &topic,
         MessageCallback    onMessageCallback )
@@ -717,7 +733,10 @@ namespace sgns::ipfs_pubsub
         {
             using Message   = libp2p::protocol::gossip::Gossip::Message;
             auto sub        = m_gossip->subscribe( { topic }, onMessageCallback );
-            auto shared_sub = std::make_shared<Subscription>( std::move( sub ) );
+            auto libp2p_sub = std::make_shared<libp2p::protocol::Subscription>( std::move( sub ) );
+            auto shared_sub = std::make_shared<GossipPubSub::Subscription>(
+                std::move( libp2p_sub ),
+                std::weak_ptr<boost::asio::io_context::strand>( m_strand ) );
             subscription->set_value( shared_sub );
 
             if ( m_logger->should_log( spdlog::level::info ) )
