@@ -18,6 +18,7 @@
 #include <libp2p/protocol/gossip/gossip.hpp>
 #include <libp2p/outcome/outcome.hpp>
 #include <optional>
+#include <mutex>
 #include "ipfs_lite/dht/kademlia_dht.hpp"
 #include <libp2p/protocol/identify/identify.hpp>
 #include <libp2p/protocol/autonat/autonat.hpp>
@@ -234,6 +235,7 @@ namespace sgns::ipfs_pubsub
         std::vector<libp2p::multi::Multiaddress>                       m_localAddressAdditional;
         std::vector<libp2p::protocol::kademlia::ContentId>             m_provideCids;
         std::vector<std::shared_future<std::shared_ptr<Subscription>>> m_subscriptions;
+        std::mutex                                                      m_subscriptions_mutex;
 
         // Address monitoring and peer management
         std::shared_ptr<boost::asio::steady_timer> m_address_monitor_timer;

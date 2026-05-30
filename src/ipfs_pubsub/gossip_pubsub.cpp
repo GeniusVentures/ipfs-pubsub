@@ -578,24 +578,27 @@ namespace sgns::ipfs_pubsub
     void GossipPubSub::Stop()
     {
         // Cancel all subscriptions before stopping
-        for ( auto &subscription : m_subscriptions )
         {
-            if ( subscription.valid() )
+            std::lock_guard<std::mutex> lock( m_subscriptions_mutex );
+            for ( auto &subscription : m_subscriptions )
             {
-                try
+                if ( subscription.valid() )
                 {
-                    if ( auto shared_sub = subscription.get(); shared_sub )
+                    try
                     {
-                        shared_sub->cancel();
+                        if ( auto shared_sub = subscription.get(); shared_sub )
+                        {
+                            shared_sub->cancel();
+                        }
+                    }
+                    catch ( ... )
+                    {
+                        // TODO: Handle exceptions
                     }
                 }
-                catch ( ... )
-                {
-                    // TODO: Handle exceptions
-                }
             }
+            m_subscriptions.clear();
         }
-        m_subscriptions.clear();
         if ( m_context->stopped() )
         {
             return;
@@ -758,7 +761,10 @@ namespace sgns::ipfs_pubsub
         auto shared_future = subscription->get_future().share();
 
         // Store for internal management
-        m_subscriptions.push_back( shared_future );
+        {
+            std::lock_guard<std::mutex> lock( m_subscriptions_mutex );
+            m_subscriptions.push_back( shared_future );
+        }
 
         return shared_future;
     }
