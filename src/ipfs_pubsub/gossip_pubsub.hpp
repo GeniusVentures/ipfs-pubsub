@@ -203,7 +203,6 @@ namespace sgns::ipfs_pubsub
 
         libp2p::protocol::gossip::Config                               config_;
         std::shared_ptr<boost::asio::io_context>                       m_context;
-        std::unique_ptr<boost::asio::io_context::strand>               m_strand;
         std::thread                                                    m_thread;
         std::shared_ptr<libp2p::Host>                                  m_host;
         std::shared_ptr<libp2p::protocol::gossip::Gossip>              m_gossip;

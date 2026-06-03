@@ -217,7 +217,6 @@ namespace sgns::ipfs_pubsub
 
         // Create asio context
         m_context = injector.create<std::shared_ptr<boost::asio::io_context>>();
-        m_strand  = std::make_unique<boost::asio::io_context::strand>( *m_context );
 
         // host is our local libp2p node
         m_host = injector.create<std::shared_ptr<libp2p::Host>>();
@@ -325,7 +324,7 @@ namespace sgns::ipfs_pubsub
         }
 
         // Start the node as soon as async engine starts
-        m_strand->post(
+        boost::asio::post(*m_context,
             [result, peerInfo, this]
             {
                 auto listen_res = m_host->listen( peerInfo->addresses[0] );
@@ -657,10 +656,10 @@ namespace sgns::ipfs_pubsub
             }
         };
 
-        // Always post to strand to ensure proper synchronization
-        if ( m_strand && !m_context->stopped() )
+        // Post to io_context to ensure proper synchronization
+        if ( !m_context->stopped() )
         {
-            m_strand->post( stopF );
+            boost::asio::post( *m_context, stopF );
         }
         else
         {
@@ -727,14 +726,7 @@ namespace sgns::ipfs_pubsub
             }
         };
 
-        if ( m_thread.get_id() == std::this_thread::get_id() )
-        {
-            subsF();
-        }
-        else
-        {
-            m_strand->post( subsF );
-        }
+        boost::asio::post( *m_context, subsF );
 
         auto shared_future = subscription->get_future().share();
 
@@ -746,7 +738,7 @@ namespace sgns::ipfs_pubsub
 
     void GossipPubSub::Publish( const std::string &topic, const std::vector<uint8_t> &message )
     {
-        m_strand->post(
+        boost::asio::post( *m_context,
             [topic, message, this]()
             {
                 m_gossip->publish( topic, message );
@@ -760,7 +752,7 @@ namespace sgns::ipfs_pubsub
 
     void GossipPubSub::PublishBuffered( const std::string &topic, const std::vector<uint8_t> &message )
     {
-        m_strand->post(
+        boost::asio::post( *m_context,
             [topic, message, this]()
             {
                 // Add to pending messages
@@ -781,7 +773,7 @@ namespace sgns::ipfs_pubsub
             return;
         }
 
-        m_strand->post(
+        boost::asio::post( *m_context,
             [messages, this]()
             {
                 for ( const auto &[topic, message] : messages )
@@ -810,7 +802,7 @@ namespace sgns::ipfs_pubsub
             {
                 if ( !ec && !m_context->stopped() )
                 {
-                    m_strand->post( [this]() { flushPendingMessages(); } );
+                    boost::asio::post( *m_context, [this]() { flushPendingMessages(); } );
                 }
             } );
     }
