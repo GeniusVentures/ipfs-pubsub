@@ -356,7 +356,7 @@ namespace sgns::ipfs_pubsub
 
                 m_host->start();
                 m_gossip->start();
-                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
                 // Apply bootstrap peers only after host and gossip are fully started.
                 auto &conn_mgr = m_host->getNetwork().getConnectionManager();
                 for ( const auto &remotePeerAddress : booststrapPeers )
@@ -415,10 +415,18 @@ namespace sgns::ipfs_pubsub
                         if ( provider.id != m_host->getId() )
                         {
                             // Protect provider peers - they are valuable for content discovery
-                            conn_mgr.protectPeer( provider.id, "dht-provider" );
-                            conn_mgr.tagPeer( provider.id, "content-provider", 500 ); // High value tag
 
-                            m_gossip->addBootstrapPeer( provider.id, provider.addresses );
+                            m_strand->post( [this, provider, &conn_mgr]()
+                            {
+                                m_logger->info( "DHT: New Peer: {}", provider.id.toBase58() );
+                                for ( auto &provaddr : provider.addresses )
+                                {
+                                    m_logger->debug( "DHT: Provider address: {}", provaddr.getStringAddress() );
+                                }
+                                conn_mgr.protectPeer( provider.id, "dht-provider" );
+                                conn_mgr.tagPeer( provider.id, "content-provider", 500 ); // High value tag
+                                m_gossip->addBootstrapPeer( provider.id, provider.addresses );
+                                } );
                         }
                     }
                     std::chrono::seconds interval( 120 );
@@ -461,11 +469,17 @@ namespace sgns::ipfs_pubsub
                         }
                         if ( provider.id != m_host->getId() )
                         {
-                            // Protect provider peers - they are valuable for content discovery
-                            conn_mgr.protectPeer( provider.id, "dht-provider" );
-                            conn_mgr.tagPeer( provider.id, "content-provider", 500 ); // High value tag
-
-                            m_gossip->addBootstrapPeer( provider.id, provider.addresses );
+                            m_strand->post( [this, provider, &conn_mgr]()
+                            {
+                                m_logger->info( "DHT: New Peer: {}", provider.id.toBase58() );
+                                for ( auto &provaddr : provider.addresses )
+                                {
+                                    m_logger->debug( "DHT: Provider address: {}", provaddr.getStringAddress() );
+                                }
+                                conn_mgr.protectPeer( provider.id, "dht-provider" );
+                                conn_mgr.tagPeer( provider.id, "content-provider", 500 ); // High value tag
+                                m_gossip->addBootstrapPeer( provider.id, provider.addresses );
+                                } );
                         }
                     }
                     std::chrono::seconds interval( 300 ); // 5 minutes (was 120s)
@@ -551,11 +565,20 @@ namespace sgns::ipfs_pubsub
             boost::optional<libp2p::peer::PeerInfo> remotePeerInfo = PeerInfoFromString( remotePeerAddress );
             if ( remotePeerInfo )
             {
-                // Protect bootstrap peers - they are manually configured important peers
-                conn_mgr.protectPeer( remotePeerInfo->id, "bootstrap-peer" );
-                conn_mgr.tagPeer( remotePeerInfo->id, "bootstrap", 300 ); // Medium-high value tag
+                m_strand->post( [this, remotePeerInfo, &conn_mgr]()
+                {
+                    m_logger->info( "Adding new peer: {}", remotePeerInfo->id.toBase58() );
+                    for ( auto &addr : remotePeerInfo->addresses )
+                    {
+                        m_logger->debug( "New peer address: {}", addr.getStringAddress() );
+                    }
+                    // Protect bootstrap peers - they are manually configured important peers
+                    conn_mgr.protectPeer( remotePeerInfo->id, "bootstrap-peer" );
+                    conn_mgr.tagPeer( remotePeerInfo->id, "bootstrap", 300 ); // Medium-high value tag
 
-                m_gossip->addBootstrapPeer( remotePeerInfo->id, remotePeerInfo->addresses[0] );
+                    m_gossip->addBootstrapPeer( remotePeerInfo->id, remotePeerInfo->addresses[0] );
+                } );
+
             }
         }
     }
