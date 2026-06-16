@@ -59,6 +59,15 @@ namespace sgns::ipfs_pubsub
             Subscription &operator=( Subscription && ) = default;
             ~Subscription() { cancel(); }
             void cancel();
+
+            /// Move the inner libp2p subscription out without cancelling.
+            /// Used during shutdown to defer cleanup until after the
+            /// Source objects are gone.
+            std::shared_ptr<libp2p::protocol::Subscription> move_inner()
+            {
+                return std::move( inner_ );
+            }
+
             Subscription( std::shared_ptr<libp2p::protocol::Subscription> inner,
                           std::weak_ptr<boost::asio::io_context::strand>  strand )
                 : inner_( std::move( inner ) ), strand_( std::move( strand ) )

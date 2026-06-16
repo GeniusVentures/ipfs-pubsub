@@ -594,7 +594,14 @@ namespace sgns::ipfs_pubsub
 
     void GossipPubSub::Stop()
     {
-        // Cancel all subscriptions before stopping
+        // Move the inner libp2p subscriptions out of our Subscription
+        // wrappers without calling cancel().  The Source objects they
+        // reference (inside GossipCore) are about to be torn down by
+        // stopF below; trying to unsubscribe now can crash inside
+        // source_wptr_.lock().  We keep the inner subscriptions alive
+        // in a holding vector that outlives the stopF handler so their
+        // destructors run after GossipCore is fully stopped.
+        std::vector<std::shared_ptr<libp2p::protocol::Subscription>> deferred_inner;
         {
             std::lock_guard<std::mutex> lock( m_subscriptions_mutex );
             for ( auto &subscription : m_subscriptions )
@@ -605,12 +612,15 @@ namespace sgns::ipfs_pubsub
                     {
                         if ( auto shared_sub = subscription.get(); shared_sub )
                         {
-                            shared_sub->cancel();
+                            auto inner = shared_sub->move_inner();
+                            if ( inner )
+                            {
+                                deferred_inner.push_back( std::move( inner ) );
+                            }
                         }
                     }
                     catch ( ... )
                     {
-                        // TODO: Handle exceptions
                     }
                 }
             }
@@ -729,18 +739,18 @@ namespace sgns::ipfs_pubsub
 
     void GossipPubSub::Subscription::cancel()
     {
+        // Cancel synchronously — do not post to the strand.
+        // During shutdown (Stop()), no concurrent publish operations
+        // are running, so synchronisation with the strand is unnecessary.
+        // Posting asynchronously creates a race where the lambda may fire
+        // after m_gossip->stop() has destroyed the Source objects, causing
+        // a use-after-free inside source_wptr_.lock().
         auto inner = std::move( inner_ );
         if ( !inner )
         {
             return;
         }
-        if ( auto strand = strand_.lock() )
-        {
-            boost::asio::post( *strand, [inner = std::move( inner )]() mutable
-            {
-                inner->cancel();
-            } );
-        }
+        inner->cancel();
     }
 
     std::shared_future<std::shared_ptr<GossipPubSub::Subscription>> GossipPubSub::Subscribe(
