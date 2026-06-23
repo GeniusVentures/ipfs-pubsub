@@ -217,7 +217,7 @@ namespace sgns::ipfs_pubsub
 
         // Create asio context
         m_context = injector.create<std::shared_ptr<boost::asio::io_context>>();
-        m_strand  = std::make_unique<boost::asio::io_context::strand>( *m_context );
+        m_strand  = std::make_shared<boost::asio::io_context::strand>( *m_context );
 
         // host is our local libp2p node
         m_host = injector.create<std::shared_ptr<libp2p::Host>>();
@@ -297,22 +297,6 @@ namespace sgns::ipfs_pubsub
         }
         m_logger->info( ( boost::format( "%s: Starting PubSub service" ) % m_localAddress ).str() );
 
-        // Tell gossip to connect to remote peers, only if specified
-        auto &conn_mgr = m_host->getNetwork().getConnectionManager();
-
-        for ( const auto &remotePeerAddress : booststrapPeers )
-        {
-            boost::optional<libp2p::peer::PeerInfo> remotePeerInfo = PeerInfoFromString( remotePeerAddress );
-            if ( remotePeerInfo )
-            {
-                // Protect bootstrap peers - they are manually configured important peers
-                conn_mgr.protectPeer( remotePeerInfo->id, "bootstrap-peer" );
-                conn_mgr.tagPeer( remotePeerInfo->id, "bootstrap", 300 ); // Medium-high value tag
-
-                m_gossip->addBootstrapPeer( remotePeerInfo->id, remotePeerInfo->addresses[0] );
-            }
-        }
-
         // Local address -> peer info
         boost::optional<libp2p::peer::PeerInfo> peerInfo = PeerInfoFromString( m_localAddress );
         if ( !peerInfo )
@@ -326,7 +310,7 @@ namespace sgns::ipfs_pubsub
 
         // Start the node as soon as async engine starts
         m_strand->post(
-            [result, peerInfo, this]
+            [result, peerInfo, booststrapPeers, this]
             {
                 auto listen_res = m_host->listen( peerInfo->addresses[0] );
                 if ( !listen_res )
@@ -372,6 +356,22 @@ namespace sgns::ipfs_pubsub
 
                 m_host->start();
                 m_gossip->start();
+
+                // Apply bootstrap peers only after host and gossip are fully started.
+                auto &conn_mgr = m_host->getNetwork().getConnectionManager();
+                for ( const auto &remotePeerAddress : booststrapPeers )
+                {
+                    boost::optional<libp2p::peer::PeerInfo> remotePeerInfo = PeerInfoFromString( remotePeerAddress );
+                    if ( remotePeerInfo )
+                    {
+                        // Protect bootstrap peers - they are manually configured important peers
+                        conn_mgr.protectPeer( remotePeerInfo->id, "bootstrap-peer" );
+                        conn_mgr.tagPeer( remotePeerInfo->id, "bootstrap", 300 ); // Medium-high value tag
+
+                        m_gossip->addBootstrapPeer( remotePeerInfo->id, remotePeerInfo->addresses[0] );
+                    }
+                }
+
                 m_logger->info( ( boost::format( "%s : PubSub service started" ) % m_localAddress ).str() );
                 result->set_value( std::error_code() );
             } );
@@ -407,18 +407,23 @@ namespace sgns::ipfs_pubsub
                 auto &providers = res.value();
                 if ( !providers.empty() )
                 {
-                    // Get connection manager for protecting valuable provider peers
-                    auto &conn_mgr = m_host->getNetwork().getConnectionManager();
-
                     for ( auto &provider : providers )
                     {
                         if ( provider.id != m_host->getId() )
                         {
                             // Protect provider peers - they are valuable for content discovery
-                            conn_mgr.protectPeer( provider.id, "dht-provider" );
-                            conn_mgr.tagPeer( provider.id, "content-provider", 500 ); // High value tag
-
-                            m_gossip->addBootstrapPeer( provider.id, provider.addresses );
+                            m_strand->post( [this, provider]()
+                            {
+                                m_logger->info( "DHT: New Peer: {}", provider.id.toBase58() );
+                                for ( auto &provaddr : provider.addresses )
+                                {
+                                    m_logger->debug( "DHT: Provider address: {}", provaddr.getStringAddress() );
+                                }
+                                auto &conn_mgr = m_host->getNetwork().getConnectionManager();
+                                conn_mgr.protectPeer( provider.id, "dht-provider" );
+                                conn_mgr.tagPeer( provider.id, "content-provider", 500 ); // High value tag
+                                m_gossip->addBootstrapPeer( provider.id, provider.addresses );
+                                } );
                         }
                     }
                     std::chrono::seconds interval( 120 );
@@ -449,9 +454,6 @@ namespace sgns::ipfs_pubsub
                 auto &providers = res.value();
                 if ( !providers.empty() )
                 {
-                    // Get connection manager for protecting valuable provider peers
-                    auto &conn_mgr = m_host->getNetwork().getConnectionManager();
-
                     for ( auto &provider : providers )
                     {
                         m_logger->info( "DHT: New Peer: {}", provider.id.toBase58() );
@@ -461,11 +463,18 @@ namespace sgns::ipfs_pubsub
                         }
                         if ( provider.id != m_host->getId() )
                         {
-                            // Protect provider peers - they are valuable for content discovery
-                            conn_mgr.protectPeer( provider.id, "dht-provider" );
-                            conn_mgr.tagPeer( provider.id, "content-provider", 500 ); // High value tag
-
-                            m_gossip->addBootstrapPeer( provider.id, provider.addresses );
+                            m_strand->post( [this, provider]()
+                            {
+                                m_logger->info( "DHT: New Peer: {}", provider.id.toBase58() );
+                                for ( auto &provaddr : provider.addresses )
+                                {
+                                    m_logger->debug( "DHT: Provider address: {}", provaddr.getStringAddress() );
+                                }
+                                auto &conn_mgr = m_host->getNetwork().getConnectionManager();
+                                conn_mgr.protectPeer( provider.id, "dht-provider" );
+                                conn_mgr.tagPeer( provider.id, "content-provider", 500 ); // High value tag
+                                m_gossip->addBootstrapPeer( provider.id, provider.addresses );
+                                } );
                         }
                     }
                     std::chrono::seconds interval( 300 ); // 5 minutes (was 120s)
@@ -544,18 +553,26 @@ namespace sgns::ipfs_pubsub
 
     void GossipPubSub::AddPeers( const std::vector<std::string> &booststrapPeers )
     {
-        auto &conn_mgr = m_host->getNetwork().getConnectionManager();
-
         for ( const auto &remotePeerAddress : booststrapPeers )
         {
             boost::optional<libp2p::peer::PeerInfo> remotePeerInfo = PeerInfoFromString( remotePeerAddress );
             if ( remotePeerInfo )
             {
-                // Protect bootstrap peers - they are manually configured important peers
-                conn_mgr.protectPeer( remotePeerInfo->id, "bootstrap-peer" );
-                conn_mgr.tagPeer( remotePeerInfo->id, "bootstrap", 300 ); // Medium-high value tag
+                m_strand->post( [this, remotePeerInfo]()
+                {
+                    m_logger->info( "Adding new peer: {}", remotePeerInfo->id.toBase58() );
+                    for ( auto &addr : remotePeerInfo->addresses )
+                    {
+                        m_logger->debug( "New peer address: {}", addr.getStringAddress() );
+                    }
+                    // Protect bootstrap peers - they are manually configured important peers
+                    auto &conn_mgr = m_host->getNetwork().getConnectionManager();
+                    conn_mgr.protectPeer( remotePeerInfo->id, "bootstrap-peer" );
+                    conn_mgr.tagPeer( remotePeerInfo->id, "bootstrap", 300 ); // Medium-high value tag
 
-                m_gossip->addBootstrapPeer( remotePeerInfo->id, remotePeerInfo->addresses[0] );
+                    m_gossip->addBootstrapPeer( remotePeerInfo->id, remotePeerInfo->addresses[0] );
+                } );
+
             }
         }
     }
@@ -577,25 +594,38 @@ namespace sgns::ipfs_pubsub
 
     void GossipPubSub::Stop()
     {
-        // Cancel all subscriptions before stopping
-        for ( auto &subscription : m_subscriptions )
+        // Move the inner libp2p subscriptions out of our Subscription
+        // wrappers without calling cancel().  The Source objects they
+        // reference (inside GossipCore) are about to be torn down by
+        // stopF below; trying to unsubscribe now can crash inside
+        // source_wptr_.lock().  We keep the inner subscriptions alive
+        // in a holding vector that outlives the stopF handler so their
+        // destructors run after GossipCore is fully stopped.
+        std::vector<std::shared_ptr<libp2p::protocol::Subscription>> deferred_inner;
         {
-            if ( subscription.valid() )
+            std::lock_guard<std::mutex> lock( m_subscriptions_mutex );
+            for ( auto &subscription : m_subscriptions )
             {
-                try
+                if ( subscription.valid() )
                 {
-                    if ( auto shared_sub = subscription.get(); shared_sub )
+                    try
                     {
-                        shared_sub->cancel();
+                        if ( auto shared_sub = subscription.get(); shared_sub )
+                        {
+                            auto inner = shared_sub->move_inner();
+                            if ( inner )
+                            {
+                                deferred_inner.push_back( std::move( inner ) );
+                            }
+                        }
+                    }
+                    catch ( ... )
+                    {
                     }
                 }
-                catch ( ... )
-                {
-                    // TODO: Handle exceptions
-                }
             }
+            m_subscriptions.clear();
         }
-        m_subscriptions.clear();
         if ( m_context->stopped() )
         {
             return;
@@ -707,6 +737,22 @@ namespace sgns::ipfs_pubsub
         return std::string( interface_addresses[0].getStringAddress() ) + "/ipfs/" + m_host->getId().toBase58();
     }
 
+    void GossipPubSub::Subscription::cancel()
+    {
+        // Cancel synchronously — do not post to the strand.
+        // During shutdown (Stop()), no concurrent publish operations
+        // are running, so synchronisation with the strand is unnecessary.
+        // Posting asynchronously creates a race where the lambda may fire
+        // after m_gossip->stop() has destroyed the Source objects, causing
+        // a use-after-free inside source_wptr_.lock().
+        auto inner = std::move( inner_ );
+        if ( !inner )
+        {
+            return;
+        }
+        inner->cancel();
+    }
+
     std::shared_future<std::shared_ptr<GossipPubSub::Subscription>> GossipPubSub::Subscribe(
         const std::string &topic,
         MessageCallback    onMessageCallback )
@@ -717,7 +763,10 @@ namespace sgns::ipfs_pubsub
         {
             using Message   = libp2p::protocol::gossip::Gossip::Message;
             auto sub        = m_gossip->subscribe( { topic }, onMessageCallback );
-            auto shared_sub = std::make_shared<Subscription>( std::move( sub ) );
+            auto libp2p_sub = std::make_shared<libp2p::protocol::Subscription>( std::move( sub ) );
+            auto shared_sub = std::make_shared<GossipPubSub::Subscription>(
+                std::move( libp2p_sub ),
+                std::weak_ptr<boost::asio::io_context::strand>( m_strand ) );
             subscription->set_value( shared_sub );
 
             if ( m_logger->should_log( spdlog::level::info ) )
@@ -739,7 +788,10 @@ namespace sgns::ipfs_pubsub
         auto shared_future = subscription->get_future().share();
 
         // Store for internal management
-        m_subscriptions.push_back( shared_future );
+        {
+            std::lock_guard<std::mutex> lock( m_subscriptions_mutex );
+            m_subscriptions.push_back( shared_future );
+        }
 
         return shared_future;
     }

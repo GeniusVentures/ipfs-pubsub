@@ -18,6 +18,7 @@
 #include <libp2p/protocol/gossip/gossip.hpp>
 #include <libp2p/outcome/outcome.hpp>
 #include <optional>
+#include <mutex>
 #include "ipfs_lite/dht/kademlia_dht.hpp"
 #include <libp2p/protocol/identify/identify.hpp>
 #include <libp2p/protocol/autonat/autonat.hpp>
@@ -46,8 +47,37 @@ namespace sgns::ipfs_pubsub
     {
     public:
         typedef libp2p::protocol::gossip::Gossip::Message              Message;
-        typedef libp2p::protocol::Subscription                         Subscription;
         typedef libp2p::protocol::gossip::Gossip::SubscriptionCallback MessageCallback;
+
+        class Subscription
+        {
+        public:
+            Subscription() = default;
+            Subscription( const Subscription & ) = delete;
+            Subscription &operator=( const Subscription & ) = delete;
+            Subscription( Subscription && ) = default;
+            Subscription &operator=( Subscription && ) = default;
+            ~Subscription() { cancel(); }
+            void cancel();
+
+            /// Move the inner libp2p subscription out without cancelling.
+            /// Used during shutdown to defer cleanup until after the
+            /// Source objects are gone.
+            std::shared_ptr<libp2p::protocol::Subscription> move_inner()
+            {
+                return std::move( inner_ );
+            }
+
+            Subscription( std::shared_ptr<libp2p::protocol::Subscription> inner,
+                          std::weak_ptr<boost::asio::io_context::strand>  strand )
+                : inner_( std::move( inner ) ), strand_( std::move( strand ) )
+            {
+            }
+
+        private:
+            std::shared_ptr<libp2p::protocol::Subscription> inner_;
+            std::weak_ptr<boost::asio::io_context::strand>  strand_;
+        };
 
         /** Creates a gossip subscription service.
          */
@@ -203,7 +233,7 @@ namespace sgns::ipfs_pubsub
 
         libp2p::protocol::gossip::Config                               config_;
         std::shared_ptr<boost::asio::io_context>                       m_context;
-        std::unique_ptr<boost::asio::io_context::strand>               m_strand;
+        std::shared_ptr<boost::asio::io_context::strand>               m_strand;
         std::thread                                                    m_thread;
         std::shared_ptr<libp2p::Host>                                  m_host;
         std::shared_ptr<libp2p::protocol::gossip::Gossip>              m_gossip;
@@ -214,6 +244,7 @@ namespace sgns::ipfs_pubsub
         std::vector<libp2p::multi::Multiaddress>                       m_localAddressAdditional;
         std::vector<libp2p::protocol::kademlia::ContentId>             m_provideCids;
         std::vector<std::shared_future<std::shared_ptr<Subscription>>> m_subscriptions;
+        std::mutex                                                      m_subscriptions_mutex;
 
         // Address monitoring and peer management
         std::shared_ptr<boost::asio::steady_timer> m_address_monitor_timer;
