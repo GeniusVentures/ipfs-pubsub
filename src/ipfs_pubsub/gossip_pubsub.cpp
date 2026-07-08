@@ -1,5 +1,6 @@
 #include "ipfs_pubsub/gossip_pubsub.hpp"
 
+#include <algorithm>
 #include <boost/current_function.hpp>
 #include <iostream>
 #include <boost/format.hpp>
@@ -626,10 +627,6 @@ namespace sgns::ipfs_pubsub
             }
             m_subscriptions.clear();
         }
-        if ( m_context->stopped() )
-        {
-            return;
-        }
 
         // Cancel the timer to prevent new scheduled operations
         if ( m_timer )
@@ -648,47 +645,80 @@ namespace sgns::ipfs_pubsub
         }
 
         // Use a promise/future to wait for actual shutdown completion
-        std::promise<void> shutdownPromise;
-        auto               shutdownFuture = shutdownPromise.get_future();
+        auto shutdownPromise = std::make_shared<std::promise<void>>();
+        auto shutdownFuture  = shutdownPromise->get_future();
+        auto canDrainContext = m_thread.joinable() && m_thread.get_id() != std::this_thread::get_id() &&
+                               m_context && !m_context->stopped();
 
-        auto stopF = [this, &shutdownPromise]()
+        auto stopF = [this, shutdownPromise, canDrainContext]()
         {
             try
             {
-                if ( !m_context->stopped() )
+                // Stop components in reverse order of startup
+                if ( m_gossip )
                 {
-                    // Stop components in reverse order of startup
-                    if ( m_gossip )
-                    {
-                        m_gossip->stop();
-                        // Wait for gossip to actually stop (if possible)
-                    }
-
-                    if ( m_host )
-                    {
-                        m_host->stop();
-                        // Wait for host to actually stop (if possible)
-                    }
-
-                    // Cancel any remaining timer operations
-                    if ( m_timer )
-                    {
-                        m_timer->cancel();
-                    }
-
-                    // Finally stop the context
-                    m_context->stop();
+                    m_gossip->stop();
                 }
-                shutdownPromise.set_value(); // Signal completion
+
+                if ( m_host )
+                {
+                    auto &connectionManager = m_host->getNetwork().getConnectionManager();
+                    std::vector<libp2p::peer::PeerId> peers_to_close;
+                    for ( const auto &connection : connectionManager.getConnections() )
+                    {
+                        if ( !connection )
+                        {
+                            continue;
+                        }
+
+                        auto remotePeer = connection->remotePeer();
+                        if ( remotePeer )
+                        {
+                            if ( std::find( peers_to_close.begin(), peers_to_close.end(), remotePeer.value() ) ==
+                                 peers_to_close.end() )
+                            {
+                                peers_to_close.push_back( remotePeer.value() );
+                            }
+                        }
+                    }
+
+                    for ( const auto &peer : peers_to_close )
+                    {
+                        connectionManager.closeConnectionsToPeer( peer );
+                    }
+
+                    connectionManager.collectGarbage();
+                    m_host->stop();
+                }
+
+                // Cancel any remaining timer operations
+                if ( m_timer )
+                {
+                    m_timer->cancel();
+                }
+
+                auto signalDone = [shutdownPromise]() { shutdownPromise->set_value(); };
+                if ( canDrainContext )
+                {
+                    m_context->post( std::move( signalDone ) );
+                }
+                else
+                {
+                    signalDone();
+                }
             }
             catch ( ... )
             {
-                shutdownPromise.set_exception( std::current_exception() );
+                shutdownPromise->set_exception( std::current_exception() );
             }
         };
 
-        // Always post to strand to ensure proper synchronization
-        if ( m_strand && !m_context->stopped() )
+        // Use the strand while the worker thread can service it; otherwise clean up inline.
+        if ( !m_thread.joinable() || m_thread.get_id() == std::this_thread::get_id() )
+        {
+            stopF();
+        }
+        else if ( m_strand && !m_context->stopped() )
         {
             m_strand->post( stopF );
         }
@@ -698,17 +728,23 @@ namespace sgns::ipfs_pubsub
         }
 
         // Wait for shutdown to actually complete (with timeout)
-        auto status = shutdownFuture.wait_for( std::chrono::milliseconds( 1000 ) );
-        if ( status == std::future_status::timeout )
-        {
-            // Force shutdown if it takes too long
-            m_context->stop();
-        }
+        shutdownFuture.wait_for( std::chrono::milliseconds( 1000 ) );
+        // stopF only tears down pubsub/host state; stop the io_context afterward so
+        // run() exits and the worker thread can be joined. On timeout this also forces
+        // pending asio work to unblock.
+        m_context->stop();
 
         // Wait for the worker thread to complete
         if ( m_thread.joinable() )
         {
-            m_thread.join();
+            if ( m_thread.get_id() == std::this_thread::get_id() )
+            {
+                m_thread.detach();
+            }
+            else
+            {
+                m_thread.join();
+            }
         }
     }
 
