@@ -578,12 +578,12 @@ namespace sgns::ipfs_pubsub
         }
     }
 
-    size_t GossipPubSub::getPeerCount( std::string &topic ) const
+    size_t GossipPubSub::getPeerCount( const std::string &topic ) const
     {
         return m_gossip->getPeerCount( topic );
     }
 
-    std::vector<libp2p::peer::PeerId> GossipPubSub::getAllPeers( std::string &topic ) const
+    std::vector<libp2p::peer::PeerId> GossipPubSub::getAllPeers( const std::string &topic ) const
     {
         return m_gossip->getAllPeers( topic );
     }

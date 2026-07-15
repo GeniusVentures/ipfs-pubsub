@@ -199,7 +199,7 @@ namespace sgns::ipfs_pubsub
         void ScheduleNextFind( const libp2p::protocol::kademlia::ContentId &cid, std::chrono::seconds interval );
         /**
          * @brief       Add peers to be bootstrapped.
-         * @param[in]   booststrapPeers: Vector of peers 
+         * @param[in]   booststrapPeers: Vector of peers
           */
         void AddPeers( const std::vector<std::string> &booststrapPeers );
 
@@ -210,13 +210,13 @@ namespace sgns::ipfs_pubsub
          * Get Peers in a topic
          * @param topic - String of topic name
           */
-        size_t getPeerCount( std::string &topic ) const;
+        size_t getPeerCount( const std::string &topic ) const;
 
         /**
          * Get PeerIds in a topic
          * @param topic - String of topic name
           */
-        std::vector<libp2p::peer::PeerId> getAllPeers( std::string &topic ) const;
+        std::vector<libp2p::peer::PeerId> getAllPeers( const std::string &topic ) const;
 
     private:
         void Init( std::optional<libp2p::crypto::KeyPair> keyPair );
