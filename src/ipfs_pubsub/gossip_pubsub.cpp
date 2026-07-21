@@ -311,7 +311,7 @@ namespace sgns::ipfs_pubsub
 
         // Start the node as soon as async engine starts
         m_strand->post(
-            [result, peerInfo, booststrapPeers, this]
+            [result, peerInfo, booststrapPeers, listeningPort, this]
             {
                 auto listen_res = m_host->listen( peerInfo->addresses[0] );
                 if ( !listen_res )
@@ -357,6 +357,21 @@ namespace sgns::ipfs_pubsub
 
                 m_host->start();
                 m_gossip->start();
+
+                if ( listeningPort == 0 )
+                {
+                    const auto interface_addresses = m_host->getAddressesInterfaces();
+                    if ( interface_addresses.empty() )
+                    {
+                        m_context->stop();
+                        m_logger->error( "OS assigned a listening port, but no interface address was available" );
+                        result->set_value( GossipPubSubError::FAILED_LOCAL_ADDRESS_LISTENING );
+                        return;
+                    }
+                    m_localAddress = std::string( interface_addresses.front().getStringAddress() ) + "/p2p/" +
+                                     m_host->getId().toBase58();
+                    m_logger->info( "OS-assigned PubSub address: {}", m_localAddress );
+                }
 
                 // Apply bootstrap peers only after host and gossip are fully started.
                 auto &conn_mgr = m_host->getNetwork().getConnectionManager();
