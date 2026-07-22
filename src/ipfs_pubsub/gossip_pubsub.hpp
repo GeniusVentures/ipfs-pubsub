@@ -220,6 +220,8 @@ namespace sgns::ipfs_pubsub
 
     private:
         void Init( std::optional<libp2p::crypto::KeyPair> keyPair );
+        
+        void StopImpl();
 
         static libp2p::protocol::gossip::Config GetDefaultConfig()
         {
@@ -232,6 +234,7 @@ namespace sgns::ipfs_pubsub
         }
 
         libp2p::protocol::gossip::Config                               config_;
+        std::once_flag                                                 m_stop_once;
         std::shared_ptr<boost::asio::io_context>                       m_context;
         std::shared_ptr<boost::asio::io_context::strand>               m_strand;
         std::thread                                                    m_thread;

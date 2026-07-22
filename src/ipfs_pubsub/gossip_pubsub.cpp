@@ -176,7 +176,8 @@ namespace
                 .TEMPLATE_TO<crypto::marshaller::KeyMarshallerImpl>()[di::override],
             di::bind<crypto::validator::KeyValidator>().TEMPLATE_TO( std::move( validator ) )[di::override],
             //Kademlia
-            libp2p::injector::makeKademliaInjector( libp2p::injector::useKademliaConfig( kademlia_config ) ),
+            libp2p::injector::makeKademliaInjector<di::extension::shared_config>(
+                libp2p::injector::useKademliaConfig( kademlia_config ) ),
             // Configure security to only support Noise (no plaintext)
             libp2p::injector::useSecurityAdaptors<libp2p::security::Noise>(),
             std::forward<decltype( args )>( args )... );
@@ -610,6 +611,11 @@ namespace sgns::ipfs_pubsub
 
     void GossipPubSub::Stop()
     {
+        std::call_once( m_stop_once, [this]() { StopImpl(); } );
+    }
+
+    void GossipPubSub::StopImpl()
+    {
         // Move the inner libp2p subscriptions out of our Subscription
         // wrappers without calling cancel().  The Source objects they
         // reference (inside GossipCore) are about to be torn down by
@@ -761,6 +767,24 @@ namespace sgns::ipfs_pubsub
                 m_thread.join();
             }
         }
+
+        // Release every object that may own an Asio socket or handler while its
+        // io_context and services are still alive. Member destruction alone is
+        // insufficient because injected objects can retain one another.
+        deferred_inner.clear();
+        m_timer.reset();
+        m_batch_timer.reset();
+        m_address_monitor_timer.reset();
+        m_batch_timer_active = false;
+        m_pending_messages.clear();
+
+        m_identify.reset();
+        dht_.reset();
+        m_gossip.reset();
+        m_host.reset();
+
+        m_strand.reset();
+        m_context.reset();
     }
 
     void GossipPubSub::Wait()
