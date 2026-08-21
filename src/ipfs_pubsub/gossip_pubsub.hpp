@@ -245,6 +245,10 @@ namespace sgns::ipfs_pubsub
         libp2p::protocol::gossip::Config                               config_;
         std::once_flag                                                 m_stop_once;
         std::atomic<bool>                                              m_started{ false };
+        // Serializes acceptance of a publish operation with shutdown.  Once Stop()
+        // has made the service unavailable, Publish() must not enqueue work that
+        // the stopped io_context can no longer execute.
+        std::mutex                                                     m_lifecycle_mutex;
         std::shared_ptr<boost::asio::io_context>                       m_context;
         std::shared_ptr<boost::asio::io_context::strand>               m_strand;
         std::thread                                                    m_thread;

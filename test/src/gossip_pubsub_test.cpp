@@ -75,6 +75,28 @@ TEST_F( GossipPubSubTest, SendMessageToSingleSubscribedTopic )
 }
 
 /**
+ * @given A pubsub service that has completed shutdown
+ * @when A caller attempts to publish a notification
+ * @then The attempt returns the concrete non-running error without waiting for
+ *       a handler on the stopped io_context.
+ */
+TEST_F( GossipPubSubTest, PublishAfterStopFailsWithoutBlocking )
+{
+    GossipPubSub pubs;
+    ASSERT_FALSE( pubs.Start( 40001, {} ).get() );
+    pubs.Stop();
+
+    auto publish = std::async(
+        std::launch::async,
+        [&pubs]() { return pubs.Publish( "topic", std::vector<uint8_t>{ 'm' } ); } );
+
+    ASSERT_EQ( publish.wait_for( std::chrono::milliseconds( 100 ) ), std::future_status::ready );
+    auto result = publish.get();
+    ASSERT_FALSE( result );
+    EXPECT_EQ( result.error(), make_error_code( sgns::ipfs_pubsub::GossipPubSubError::SERVICE_NOT_RUNNING ) );
+}
+
+/**
  * @given A pubsub service which is subscribed to a single topic
  * @when A message is published to a topic that the service is not subscribed to.
  * @then No messages received.

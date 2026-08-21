@@ -43,6 +43,8 @@ OUTCOME_CPP_DEFINE_CATEGORY_3( sgns::ipfs_pubsub, GossipPubSubError, e )
 
 namespace
 {
+    constexpr auto kPublishCompletionTimeout = std::chrono::seconds( 1 );
+
     std::string ToString( const std::vector<uint8_t> &buf )
     {
         // NOLINTNEXTLINE
@@ -616,7 +618,10 @@ namespace sgns::ipfs_pubsub
 
     void GossipPubSub::Stop()
     {
-        m_started.store( false );
+        {
+            std::lock_guard<std::mutex> lock( m_lifecycle_mutex );
+            m_started.store( false );
+        }
         std::call_once( m_stop_once, [this]() { StopImpl(); } );
     }
 
@@ -880,9 +885,12 @@ namespace sgns::ipfs_pubsub
     libp2p::outcome::result<void> GossipPubSub::Publish( const std::string &topic,
                                                           const std::vector<uint8_t> &message )
     {
-        if ( !IsStarted() || !m_strand || !m_gossip )
         {
-            return libp2p::outcome::failure( GossipPubSubError::SERVICE_NOT_RUNNING );
+            std::lock_guard<std::mutex> lock( m_lifecycle_mutex );
+            if ( !IsStarted() || !m_strand || !m_gossip )
+            {
+                return libp2p::outcome::failure( GossipPubSubError::SERVICE_NOT_RUNNING );
+            }
         }
 
         auto publish = [topic, message, this]() -> libp2p::outcome::result<void>
@@ -916,7 +924,33 @@ namespace sgns::ipfs_pubsub
 
         auto completion = std::make_shared<std::promise<libp2p::outcome::result<void>>>();
         auto future     = completion->get_future();
-        m_strand->post( [publish = std::move( publish ), completion]() mutable { completion->set_value( publish() ); } );
+        try
+        {
+            std::lock_guard<std::mutex> lock( m_lifecycle_mutex );
+            if ( !IsStarted() || !m_strand || !m_gossip )
+            {
+                return libp2p::outcome::failure( GossipPubSubError::SERVICE_NOT_RUNNING );
+            }
+            m_strand->post(
+                [publish = std::move( publish ), completion]() mutable { completion->set_value( publish() ); } );
+        }
+        catch ( const std::exception &error )
+        {
+            m_logger->error( "Failed to queue message for topic '{}': {}", topic, error.what() );
+            return libp2p::outcome::failure( GossipPubSubError::PUBLISH_FAILED );
+        }
+        catch ( ... )
+        {
+            m_logger->error( "Failed to queue message for topic '{}'", topic );
+            return libp2p::outcome::failure( GossipPubSubError::PUBLISH_FAILED );
+        }
+
+        if ( future.wait_for( kPublishCompletionTimeout ) != std::future_status::ready )
+        {
+            m_logger->error( "Timed out publishing message to topic '{}'", topic );
+            return libp2p::outcome::failure( IsStarted() ? GossipPubSubError::PUBLISH_FAILED
+                                                          : GossipPubSubError::SERVICE_NOT_RUNNING );
+        }
         return future.get();
     }
 
