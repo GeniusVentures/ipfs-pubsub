@@ -33,6 +33,10 @@ OUTCOME_CPP_DEFINE_CATEGORY_3( sgns::ipfs_pubsub, GossipPubSubError, e )
             return "Cannot listen to multiaddress";
         case E::FAILED_SERVICE_START:
             return "Failed to start pubsub service";
+        case E::SERVICE_NOT_RUNNING:
+            return "Pubsub service is not running";
+        case E::PUBLISH_FAILED:
+            return "Failed to publish pubsub message";
     }
     return "Unknown error";
 }
@@ -389,6 +393,7 @@ namespace sgns::ipfs_pubsub
                     }
                 }
 
+                m_started.store( true );
                 m_logger->info( ( boost::format( "%s : PubSub service started" ) % m_localAddress ).str() );
                 result->set_value( std::error_code() );
             } );
@@ -611,6 +616,7 @@ namespace sgns::ipfs_pubsub
 
     void GossipPubSub::Stop()
     {
+        m_started.store( false );
         std::call_once( m_stop_once, [this]() { StopImpl(); } );
     }
 
@@ -871,10 +877,17 @@ namespace sgns::ipfs_pubsub
         return shared_future;
     }
 
-    void GossipPubSub::Publish( const std::string &topic, const std::vector<uint8_t> &message )
+    libp2p::outcome::result<void> GossipPubSub::Publish( const std::string &topic,
+                                                          const std::vector<uint8_t> &message )
     {
-        m_strand->post(
-            [topic, message, this]()
+        if ( !IsStarted() || !m_strand || !m_gossip )
+        {
+            return libp2p::outcome::failure( GossipPubSubError::SERVICE_NOT_RUNNING );
+        }
+
+        auto publish = [topic, message, this]() -> libp2p::outcome::result<void>
+        {
+            try
             {
                 m_gossip->publish( topic, message );
                 if ( m_logger->should_log( spdlog::level::debug ) )
@@ -882,7 +895,29 @@ namespace sgns::ipfs_pubsub
                     m_logger->debug(
                         ( boost::format( "%s: Message published to topic '%s'" ) % m_localAddress % topic ).str() );
                 }
-            } );
+                return libp2p::outcome::success();
+            }
+            catch ( const std::exception &error )
+            {
+                m_logger->error( "Failed to publish message to '{}': {}", topic, error.what() );
+                return libp2p::outcome::failure( GossipPubSubError::PUBLISH_FAILED );
+            }
+            catch ( ... )
+            {
+                m_logger->error( "Failed to publish message to '{}'", topic );
+                return libp2p::outcome::failure( GossipPubSubError::PUBLISH_FAILED );
+            }
+        };
+
+        if ( m_thread.get_id() == std::this_thread::get_id() )
+        {
+            return publish();
+        }
+
+        auto completion = std::make_shared<std::promise<libp2p::outcome::result<void>>>();
+        auto future     = completion->get_future();
+        m_strand->post( [publish = std::move( publish ), completion]() mutable { completion->set_value( publish() ); } );
+        return future.get();
     }
 
     void GossipPubSub::PublishBuffered( const std::string &topic, const std::vector<uint8_t> &message )
