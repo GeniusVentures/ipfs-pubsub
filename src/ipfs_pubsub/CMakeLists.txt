@@ -29,6 +29,9 @@ target_link_libraries(ipfs-pubsub
     p2p::p2p_identify
     p2p::p2p_autonat
     p2p::p2p_holepunch_client
+    # PnetUpgraderDecorator — instantiated here by the injector::usePrivateNetwork
+    # binding in gossip_pubsub.cpp; static-lib consumers need it transitively.
+    p2p::p2p_pnet_upgrader
     ipfs-lite-cpp::ipfs_kad_dht
     spdlog::spdlog
 )
