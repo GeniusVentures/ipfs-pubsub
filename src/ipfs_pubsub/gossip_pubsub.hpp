@@ -19,6 +19,7 @@
 #include <libp2p/outcome/outcome.hpp>
 #include <optional>
 #include <mutex>
+#include "ipfs_pubsub/deny_list_connection_gater.hpp"
 #include "ipfs_lite/dht/kademlia_dht.hpp"
 #include <libp2p/protocol/identify/identify.hpp>
 #include <libp2p/protocol/autonat/autonat.hpp>
@@ -28,6 +29,10 @@
 
 namespace sgns::ipfs_pubsub
 {
+    // Private template defined in gossip_pubsub.cpp -- forward declared so
+    // the GossipPubSub class can reference it in its private section.
+    // (Definition lives in the .cpp; instantiated only there.)
+
     /**
      * Codes for errors that originate in gossip pubsub
      */
@@ -92,6 +97,47 @@ namespace sgns::ipfs_pubsub
         GossipPubSub( libp2p::crypto::KeyPair keyPair );
 
         GossipPubSub( libp2p::crypto::KeyPair keyPair, libp2p::protocol::gossip::Config config );
+
+        /** Creates a gossip subscription service within a private network.
+         * @param keyPair - public / private key pair.
+         * The public key is used as a gossip channel indentifier in a peer multiaddress
+         * @param config - gossip protocol configuration
+         * @param networkKey - private network (pnet) key. Swarm-key text, base16 or
+         * base64 encoded 32-byte PSK. Nodes created with different keys cannot
+         * communicate; must match across all nodes of the private network.
+         */
+        GossipPubSub( libp2p::crypto::KeyPair                    keyPair,
+                      libp2p::protocol::gossip::Config           config,
+                      const std::string                          &networkKey );
+
+        /** Adds a peer to the connection gater deny list.
+ * Blocked peers are rejected at every stage of the connection upgrade
+ * pipeline (dial, secured, upgraded). Existing connections are not
+ * terminated; the block applies to new connection attempts.
+ * @param peerId - the peer to block
+ */
+        void BlockPeer( const libp2p::peer::PeerId &peerId );
+
+        /** Adds several peers to the connection gater deny list.
+ * @param peerIds - the peers to block
+ */
+        void BlockPeers( const std::vector<libp2p::peer::PeerId> &peerIds );
+
+        /** Removes a peer from the connection gater deny list.
+ * @param peerId - the peer to unblock
+ */
+        void UnblockPeer( const libp2p::peer::PeerId &peerId );
+
+        /** Checks whether a peer is in the connection gater deny list.
+ * @param peerId - the peer to check
+ * @return true if the peer is blocked
+ */
+        bool IsPeerBlocked( const libp2p::peer::PeerId &peerId ) const;
+
+        /** Returns all peers currently in the connection gater deny list.
+ * @return a snapshot of the deny list
+ */
+        std::vector<libp2p::peer::PeerId> GetBlockedPeers() const;
 
         ~GossipPubSub();
 
@@ -219,7 +265,13 @@ namespace sgns::ipfs_pubsub
         std::vector<libp2p::peer::PeerId> getAllPeers( const std::string &topic ) const;
 
     private:
-        void Init( std::optional<libp2p::crypto::KeyPair> keyPair );
+        void Init( std::optional<libp2p::crypto::KeyPair> keyPair,
+                   std::optional<std::string>            networkKey = std::nullopt );
+
+        // Extracts common objects (context, host, gossip, DHT, protocols)
+        // from the assembled injector. Template, defined in gossip_pubsub.cpp.
+        template <typename Injector>
+        void InitHostFromInjector( Injector &&injector );
         
         void StopImpl();
 
@@ -241,6 +293,7 @@ namespace sgns::ipfs_pubsub
         std::shared_ptr<libp2p::Host>                                  m_host;
         std::shared_ptr<libp2p::protocol::gossip::Gossip>              m_gossip;
         std::shared_ptr<sgns::ipfs_lite::ipfs::dht::IpfsDHT>           dht_;
+        std::shared_ptr<DenyListConnectionGater>                       m_connection_gater;
         std::shared_ptr<libp2p::protocol::Identify>                    m_identify;
         std::shared_ptr<boost::asio::steady_timer>                     m_timer;
         std::string                                                    m_localAddress;
