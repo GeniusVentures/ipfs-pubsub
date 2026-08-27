@@ -281,23 +281,23 @@ namespace sgns::ipfs_pubsub
     {
 
         // Create asio context
-        m_context = injector.create<std::shared_ptr<boost::asio::io_context>>();
+        m_context = injector.template create<std::shared_ptr<boost::asio::io_context>>();
         m_strand  = std::make_shared<boost::asio::io_context::strand>( *m_context );
 
         // host is our local libp2p node
-        m_host = injector.create<std::shared_ptr<libp2p::Host>>();
+        m_host = injector.template create<std::shared_ptr<libp2p::Host>>();
 
         // Create gossip node
         m_gossip = libp2p::protocol::gossip::create(
-            injector.create<std::shared_ptr<libp2p::basic::Scheduler>>(),
+            injector.template create<std::shared_ptr<libp2p::basic::Scheduler>>(),
             m_host,
-            injector.create<std::shared_ptr<libp2p::peer::IdentityManager>>(),
-            injector.create<std::shared_ptr<libp2p::crypto::CryptoProvider>>(),
-            injector.create<std::shared_ptr<libp2p::crypto::marshaller::KeyMarshaller>>(),
+            injector.template create<std::shared_ptr<libp2p::peer::IdentityManager>>(),
+            injector.template create<std::shared_ptr<libp2p::crypto::CryptoProvider>>(),
+            injector.template create<std::shared_ptr<libp2p::crypto::marshaller::KeyMarshaller>>(),
             config_ );
 
         //Make a DHT
-        auto kademlia = injector.create<std::shared_ptr<libp2p::protocol::kademlia::Kademlia>>();
+        auto kademlia = injector.template create<std::shared_ptr<libp2p::protocol::kademlia::Kademlia>>();
         dht_ = std::make_shared<sgns::ipfs_lite::ipfs::dht::IpfsDHT>( kademlia, bootstrapAddresses_, m_context );
 
         // Create protocols using factory with custom configuration
