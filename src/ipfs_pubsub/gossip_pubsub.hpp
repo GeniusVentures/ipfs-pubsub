@@ -5,6 +5,8 @@
 #include <libp2p/basic/scheduler.hpp>
 #include <string>
 #include <chrono>
+#include <atomic>
+#include <future>
 #include <unordered_map>
 #include <set>
 
@@ -36,6 +38,8 @@ namespace sgns::ipfs_pubsub
         INVALID_LOCAL_ADDRESS = 1,
         FAILED_LOCAL_ADDRESS_LISTENING,
         FAILED_SERVICE_START,
+        SERVICE_NOT_RUNNING,
+        PUBLISH_FAILED,
     };
 
     /**
@@ -107,7 +111,12 @@ namespace sgns::ipfs_pubsub
          * @param topic - a topic to publish a message to.
          * @param message - published message
          */
-        void Publish( const std::string &topic, const std::vector<uint8_t> &message );
+        /**
+         * Publishes once and reports the completed transport attempt. A stopped
+         * service is rejected synchronously; callers must not mistake queueing
+         * work for a successful network notification.
+         */
+        libp2p::outcome::result<void> Publish( const std::string &topic, const std::vector<uint8_t> &message );
 
         /** Publish a message with automatic batching (5ms aggregation window).
          * Messages are collected and sent together to reduce overhead when publishing
@@ -235,6 +244,11 @@ namespace sgns::ipfs_pubsub
 
         libp2p::protocol::gossip::Config                               config_;
         std::once_flag                                                 m_stop_once;
+        std::atomic<bool>                                              m_started{ false };
+        // Serializes acceptance of a publish operation with shutdown.  Once Stop()
+        // has made the service unavailable, Publish() must not enqueue work that
+        // the stopped io_context can no longer execute.
+        std::mutex                                                     m_lifecycle_mutex;
         std::shared_ptr<boost::asio::io_context>                       m_context;
         std::shared_ptr<boost::asio::io_context::strand>               m_strand;
         std::thread                                                    m_thread;
@@ -304,8 +318,7 @@ namespace sgns::ipfs_pubsub
 
     inline bool GossipPubSub::IsStarted() const
     {
-        // The context was not stopped and working thread started
-        return m_context && !m_context->stopped() && m_thread.joinable();
+        return m_started.load();
     }
 
     inline const std::string &GossipPubSub::GetLocalAddress()
