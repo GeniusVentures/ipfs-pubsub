@@ -146,7 +146,9 @@ namespace
     }
 
     template <typename... Ts>
-    auto MakeCustomHostInjector( std::optional<libp2p::crypto::KeyPair> keyPair, Ts &&...args )
+    auto MakeCustomHostInjector( std::optional<libp2p::crypto::KeyPair>                        keyPair,
+                                 std::shared_ptr<sgns::ipfs_pubsub::DenyListConnectionGater> gater,
+                                 Ts &&...args )
     {
         using namespace libp2p;
         namespace di = boost::di;
@@ -186,6 +188,8 @@ namespace
                 libp2p::injector::useKademliaConfig( kademlia_config ) ),
             // Configure security to only support Noise (no plaintext)
             libp2p::injector::useSecurityAdaptors<libp2p::security::Noise>(),
+            // Connection gater with a runtime-modifiable peer deny list
+            di::bind<network::ConnectionGater>().TEMPLATE_TO( gater )[di::override],
             std::forward<decltype( args )>( args )... );
 
         return injector;
@@ -218,29 +222,88 @@ namespace sgns::ipfs_pubsub
         Init( std::move( keyPair ) );
     }
 
-    void GossipPubSub::Init( std::optional<libp2p::crypto::KeyPair> keyPair )
+    GossipPubSub::GossipPubSub( libp2p::crypto::KeyPair          keyPair,
+                                libp2p::protocol::gossip::Config config,
+                                const std::string                &networkKey ) :
+        config_( std::move( config ) )
     {
-        // Injector creates and ties dependent objects
-        auto injector = MakeCustomHostInjector( std::move( keyPair ) );
+        Init( std::move( keyPair ), networkKey );
+    }
+
+    void GossipPubSub::BlockPeer( const libp2p::peer::PeerId &peerId )
+    {
+        m_logger->info( "Connection gater: blocking peer {}", peerId.toBase58() );
+        m_connection_gater->BlockPeer( peerId );
+    }
+
+    void GossipPubSub::BlockPeers( const std::vector<libp2p::peer::PeerId> &peerIds )
+    {
+        m_logger->info( "Connection gater: blocking {} peers", peerIds.size() );
+        m_connection_gater->BlockPeers( peerIds );
+    }
+
+    void GossipPubSub::UnblockPeer( const libp2p::peer::PeerId &peerId )
+    {
+        m_logger->info( "Connection gater: unblocking peer {}", peerId.toBase58() );
+        m_connection_gater->UnblockPeer( peerId );
+    }
+
+    bool GossipPubSub::IsPeerBlocked( const libp2p::peer::PeerId &peerId ) const
+    {
+        return m_connection_gater->IsPeerBlocked( peerId );
+    }
+
+    std::vector<libp2p::peer::PeerId> GossipPubSub::GetBlockedPeers() const
+    {
+        return m_connection_gater->GetBlockedPeers();
+    }
+
+    void GossipPubSub::Init( std::optional<libp2p::crypto::KeyPair> keyPair, std::optional<std::string> networkKey )
+    {
+        // Create connection gater with deny list support (kept for runtime
+        // peer blocking via BlockPeer()/UnblockPeer())
+        m_connection_gater = std::make_shared<DenyListConnectionGater>();
+
+        // Injector creates and ties dependent objects. Private-network mode
+        // adds the pnet injector binding, which rebinds the Upgrader to a
+        // PnetUpgraderDecorator so every connection passes the PSK boundary.
+        // Throws libp2p::injector::PskValidationError on invalid key material.
+        if ( networkKey )
+        {
+            m_logger->info( "Initializing libp2p host in private-network (pnet) mode" );
+            auto injector = MakeCustomHostInjector(
+                std::move( keyPair ), m_connection_gater, libp2p::injector::usePrivateNetwork( *networkKey ) );
+            InitHostFromInjector( std::move( injector ) );
+        }
+        else
+        {
+            auto injector = MakeCustomHostInjector( std::move( keyPair ), m_connection_gater );
+            InitHostFromInjector( std::move( injector ) );
+        }
+    }
+
+    template <typename Injector>
+    void GossipPubSub::InitHostFromInjector( Injector &&injector )
+    {
 
         // Create asio context
-        m_context = injector.create<std::shared_ptr<boost::asio::io_context>>();
+        m_context = injector.template create<std::shared_ptr<boost::asio::io_context>>();
         m_strand  = std::make_shared<boost::asio::io_context::strand>( *m_context );
 
         // host is our local libp2p node
-        m_host = injector.create<std::shared_ptr<libp2p::Host>>();
+        m_host = injector.template create<std::shared_ptr<libp2p::Host>>();
 
         // Create gossip node
         m_gossip = libp2p::protocol::gossip::create(
-            injector.create<std::shared_ptr<libp2p::basic::Scheduler>>(),
+            injector.template create<std::shared_ptr<libp2p::basic::Scheduler>>(),
             m_host,
-            injector.create<std::shared_ptr<libp2p::peer::IdentityManager>>(),
-            injector.create<std::shared_ptr<libp2p::crypto::CryptoProvider>>(),
-            injector.create<std::shared_ptr<libp2p::crypto::marshaller::KeyMarshaller>>(),
+            injector.template create<std::shared_ptr<libp2p::peer::IdentityManager>>(),
+            injector.template create<std::shared_ptr<libp2p::crypto::CryptoProvider>>(),
+            injector.template create<std::shared_ptr<libp2p::crypto::marshaller::KeyMarshaller>>(),
             config_ );
 
         //Make a DHT
-        auto kademlia = injector.create<std::shared_ptr<libp2p::protocol::kademlia::Kademlia>>();
+        auto kademlia = injector.template create<std::shared_ptr<libp2p::protocol::kademlia::Kademlia>>();
         dht_ = std::make_shared<sgns::ipfs_lite::ipfs::dht::IpfsDHT>( kademlia, bootstrapAddresses_, m_context );
 
         // Create protocols using factory with custom configuration
@@ -271,6 +334,10 @@ namespace sgns::ipfs_pubsub
             m_identify->start();
         }
     }
+
+    // Explicit instantiations are not required: InitHostFromInjector is a
+    // private template defined in this translation unit and instantiated
+    // only from GossipPubSub::Init above.
 
     std::future<std::error_code> GossipPubSub::Start( int                             listeningPort,
                                                       const std::vector<std::string> &booststrapPeers,
