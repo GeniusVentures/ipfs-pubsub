@@ -1068,10 +1068,13 @@ namespace sgns::ipfs_pubsub
 
         m_batch_timer_active = true;
         m_batch_timer->expires_after( m_batch_window );
+        // Flush on every completion, including a cancelled wait: returning early
+        // would leave m_batch_timer_active set and silently swallow every later
+        // PublishBuffered() call.
         m_batch_timer->async_wait(
-            [this]( const boost::system::error_code &ec )
+            [this]( const boost::system::error_code & )
             {
-                if ( !ec && !m_context->stopped() )
+                if ( !m_context->stopped() )
                 {
                     m_strand->post( [this]() { flushPendingMessages(); } );
                 }
@@ -1080,8 +1083,9 @@ namespace sgns::ipfs_pubsub
 
     void GossipPubSub::flushPendingMessages()
     {
-        if ( m_pending_messages.empty() )
+        if ( m_pending_messages.empty() || !m_started.load() )
         {
+            m_pending_messages.clear();
             m_batch_timer_active = false;
             return;
         }
