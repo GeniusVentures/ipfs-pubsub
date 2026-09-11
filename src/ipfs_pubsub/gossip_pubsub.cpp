@@ -1014,9 +1014,19 @@ namespace sgns::ipfs_pubsub
 
         if ( future.wait_for( kPublishCompletionTimeout ) != std::future_status::ready )
         {
-            m_logger->error( "Timed out publishing message to topic '{}'", topic );
-            return libp2p::outcome::failure( IsStarted() ? GossipPubSubError::PUBLISH_FAILED
-                                                          : GossipPubSubError::SERVICE_NOT_RUNNING );
+            if ( !IsStarted() )
+            {
+                m_logger->error( "Timed out publishing message to topic '{}' during shutdown", topic );
+                return libp2p::outcome::failure( GossipPubSubError::SERVICE_NOT_RUNNING );
+            }
+
+            // The posted lambda is never cancelled: it still runs on the strand and
+            // still publishes. Only our wait expired, so this is not a delivery
+            // failure and must not be reported as one -- callers that treat
+            // PUBLISH_FAILED as terminal were discarding state for messages that
+            // did go out. errc::timed_out marks it retryable instead.
+            m_logger->warn( "Timed out waiting for publish to topic '{}'; it stays queued on the strand", topic );
+            return libp2p::outcome::failure( std::make_error_code( std::errc::timed_out ) );
         }
         return future.get();
     }
