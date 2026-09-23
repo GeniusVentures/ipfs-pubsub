@@ -284,6 +284,23 @@ namespace sgns::ipfs_pubsub
         
         void StopImpl();
 
+        /// Subscriber-delivery hop. Runs inline from gossip's strand: copies the
+        /// message (the Gossip::Message members reference buffers gossip recycles
+        /// once the call returns) and posts the consumer callback onto the
+        /// dedicated delivery lane, so slow consumers cannot stall the gossip
+        /// strand's protocol work or Publish().
+        /// \param cb consumer callback captured at Subscribe() time
+        /// \param data gossip subscription data (empty = end of subscription)
+        void DeliverSubscriberMessage(
+            const MessageCallback &cb,
+            libp2p::protocol::gossip::Gossip::SubscriptionData data );
+
+        /// Stops the subscriber-delivery lane: gate new posts, drain what is
+        /// queued ahead of the stop marker, then join (or detach when called
+        /// from the lane's own thread). Used by Stop() and by the failed-start
+        /// path in Start().
+        void TearDownDeliveryLane();
+
         static libp2p::protocol::gossip::Config GetDefaultConfig()
         {
             libp2p::protocol::gossip::Config config;
@@ -304,6 +321,33 @@ namespace sgns::ipfs_pubsub
         std::shared_ptr<boost::asio::io_context>                       m_context;
         std::shared_ptr<boost::asio::io_context::strand>               m_strand;
         std::thread                                                    m_thread;
+        // Subscriber-delivery lane: consumer callbacks run on this dedicated
+        // strand + thread instead of inline on the gossip strand. Gossip's
+        // strand serializes protocol work, subscriber callbacks AND publishes,
+        // so one slow consumer (consensus parsing, CRDT decode) delayed every
+        // outbound publish on the node ("it stays queued on the strand").
+        // Stage one is a single lane: all callbacks remain mutually serialized
+        // exactly as before - the concurrency contract consumers were written
+        // against - they just no longer share their lane with gossip protocol
+        // work and Publish(). Sharded lanes (hash(topic) % N) can raise
+        // cross-topic parallelism later, once consumers are audited for it.
+        std::shared_ptr<boost::asio::io_context>                       m_delivery_context;
+        std::shared_ptr<boost::asio::io_context::strand>               m_delivery_strand;
+        std::thread                                                    m_delivery_thread;
+        std::atomic<bool>                                              m_delivery_running{ false };
+        std::optional<boost::asio::executor_work_guard<
+            boost::asio::io_context::executor_type>>                   m_delivery_work;
+        /// Copies handed to the delivery lane; shared_ptr-owned so posted
+        /// handlers stay self-contained.
+        struct DeliveredMessage
+        {
+            libp2p::common::ByteArray from;
+            libp2p::protocol::gossip::TopicId topic;
+            libp2p::common::ByteArray data;
+        };
+        /// Approximate lane backlog, shared with the posted handlers for the
+        /// depth warning. Lives as long as the last queued handler.
+        std::shared_ptr<std::atomic<std::size_t>>                      m_delivery_depth;
         std::shared_ptr<libp2p::Host>                                  m_host;
         std::shared_ptr<libp2p::protocol::gossip::Gossip>              m_gossip;
         std::shared_ptr<sgns::ipfs_lite::ipfs::dht::IpfsDHT>           dht_;

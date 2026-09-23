@@ -45,6 +45,10 @@ namespace
 {
     constexpr auto kPublishCompletionTimeout = std::chrono::seconds( 1 );
 
+    // Lane backlog that triggers the falling-behind warning (once per
+    // crossing, on the message that crosses it).
+    constexpr std::size_t kDeliveryDepthWarning = 10000;
+
     std::string ToString( const std::vector<uint8_t> &buf )
     {
         // NOLINTNEXTLINE
@@ -467,6 +471,18 @@ namespace sgns::ipfs_pubsub
                 result->set_value( std::error_code() );
             } );
 
+        // Subscriber-delivery lane (see DeliverSubscriberMessage): its own
+        // io_context + thread, kept alive by the work guard so an idle lane
+        // does not exit. Created before the I/O thread spawns so delivery
+        // attempts on that thread can never race these member writes; torn
+        // down again below when the service fails to start.
+        m_delivery_context = std::make_shared<boost::asio::io_context>();
+        m_delivery_strand  = std::make_shared<boost::asio::io_context::strand>( *m_delivery_context );
+        m_delivery_work.emplace( m_delivery_context->get_executor() );
+        m_delivery_depth    = std::make_shared<std::atomic<std::size_t>>( 0 );
+        m_delivery_running.store( true );
+        m_delivery_thread   = std::thread( [ctx = m_delivery_context]() { ctx->run(); } );
+
         m_thread = std::thread( [this]() { m_context->run(); } );
 
         if ( m_context->stopped() )
@@ -477,6 +493,10 @@ namespace sgns::ipfs_pubsub
             {
                 result->set_value( GossipPubSubError::FAILED_SERVICE_START );
             }
+            // Failed start: tear the just-started lane back down instead of
+            // leaving an idle thread behind.
+            TearDownDeliveryLane();
+            return result->get_future();
         }
 
         return result->get_future();
@@ -692,6 +712,94 @@ namespace sgns::ipfs_pubsub
         std::call_once( m_stop_once, [this]() { StopImpl(); } );
     }
 
+    // Subscriber-delivery hop, runs inline on the gossip strand. The copy is
+    // mandatory: Gossip::Message holds references into buffers gossip recycles
+    // as soon as the subscription callback returns. The end-of-subscription
+    // (empty) notification also goes through the lane so it cannot overtake
+    // messages delivered before it.
+    void GossipPubSub::DeliverSubscriberMessage(
+        const MessageCallback &cb,
+        libp2p::protocol::gossip::Gossip::SubscriptionData data )
+    {
+        if ( !m_delivery_running.load() || !m_delivery_strand )
+        {
+            // Shutdown reached. Real messages are dropped (the drain marker
+            // flushes everything gossip delivered before Stop), but the
+            // end-of-subscription notification is delivered inline instead:
+            // consumers historically received it during Stop(), and those
+            // using it to flush or finalize state must keep seeing it.
+            if ( !data )
+            {
+                cb( data );
+            }
+            return;
+        }
+        if ( !data )
+        {
+            boost::asio::post( *m_delivery_strand, [cb]() { cb( {} ); } );
+            return;
+        }
+        // Single combined allocation: one message hop on the I/O thread, not
+        // three shared_ptr copies per delivery. Handlers stay self-contained
+        // (no `this` capture): the depth counter and logger are captured by
+        // shared ownership, so a lane draining after GossipPubSub's
+        // destruction cannot touch freed members.
+        auto message_copy  = std::make_shared<DeliveredMessage>();
+        message_copy->from = data->from;
+        message_copy->topic = data->topic;
+        message_copy->data = data->data;
+        const auto depth   = m_delivery_depth->fetch_add( 1 ) + 1;
+        boost::asio::post( *m_delivery_strand,
+                           [cb, message_copy, depth, depth_counter = m_delivery_depth, logger = m_logger]()
+                           {
+                               depth_counter->fetch_sub( 1 );
+                               libp2p::protocol::gossip::Gossip::Message message{
+                                   message_copy->from, message_copy->topic, message_copy->data
+                               };
+                               cb( message );
+                               // The lane trades the old (pathological) backpressure of a
+                               // slow consumer for an unbounded queue. Warn on crossing the
+                               // threshold so a persistently slower consumer than the inbound
+                               // gossip rate is visible instead of silently growing memory.
+                               if ( depth == kDeliveryDepthWarning )
+                               {
+                                   logger->warn( "Subscriber-delivery lane depth reached {} messages - consumer "
+                                                 "is falling behind the inbound gossip rate",
+                                                 depth );
+                               }
+                           } );
+    }
+
+    // Stops the subscriber-delivery lane. m_delivery_running gates new
+    // DeliverSubscriberMessage posts; a stop marker posted through the strand
+    // drains everything queued ahead of it (consumers see the messages gossip
+    // delivered before shutdown, in order) before run() is allowed to return.
+    // The work guard must drop before the thread can exit. Never join from
+    // the lane's own thread (a consumer calling Stop() from a callback):
+    // joining ourselves is impossible, and leaving the thread joinable would
+    // terminate in ~thread() at member destruction - same treatment as the
+    // main gossip thread.
+    void GossipPubSub::TearDownDeliveryLane()
+    {
+        m_delivery_running.store( false );
+        if ( m_delivery_context && !m_delivery_context->stopped() )
+        {
+            boost::asio::post( *m_delivery_strand, [ctx = m_delivery_context]() { ctx->stop(); } );
+        }
+        m_delivery_work.reset();
+        if ( m_delivery_thread.joinable() )
+        {
+            if ( m_delivery_thread.get_id() == std::this_thread::get_id() )
+            {
+                m_delivery_thread.detach();
+            }
+            else
+            {
+                m_delivery_thread.join();
+            }
+        }
+    }
+
     void GossipPubSub::StopImpl()
     {
         // Move the inner libp2p subscriptions out of our Subscription
@@ -726,6 +834,9 @@ namespace sgns::ipfs_pubsub
             }
             m_subscriptions.clear();
         }
+
+        // Stop the subscriber-delivery lane (see TearDownDeliveryLane).
+        TearDownDeliveryLane();
 
         // Cancel the timer to prevent new scheduled operations
         if ( m_timer )
@@ -915,7 +1026,13 @@ namespace sgns::ipfs_pubsub
         auto subsF = [subscription, this, topic, onMessageCallback]()
         {
             using Message   = libp2p::protocol::gossip::Gossip::Message;
-            auto sub        = m_gossip->subscribe( { topic }, onMessageCallback );
+            // Route deliveries through the subscriber lane: the raw callback
+            // would run inline on gossip's strand, where a slow consumer
+            // blocks protocol work and every Publish().
+            auto deliveryCb = [this, onMessageCallback](
+                                  libp2p::protocol::gossip::Gossip::SubscriptionData data )
+            { DeliverSubscriberMessage( onMessageCallback, data ); };
+            auto sub        = m_gossip->subscribe( { topic }, deliveryCb );
             auto libp2p_sub = std::make_shared<libp2p::protocol::Subscription>( std::move( sub ) );
             auto shared_sub = std::make_shared<GossipPubSub::Subscription>(
                 std::move( libp2p_sub ),
