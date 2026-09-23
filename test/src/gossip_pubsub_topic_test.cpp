@@ -7,6 +7,20 @@
 
 using GossipPubSub      = sgns::ipfs_pubsub::GossipPubSub;
 using GossipPubSubTopic = sgns::ipfs_pubsub::GossipPubSubTopic;
+
+namespace
+{
+    // Single-node tests expect the publisher to deliver to its own
+    // subscribers. GossipCore::publish forwards locally only when
+    // echo_forward_mode is on; the production default is off.
+    libp2p::protocol::gossip::Config MakeEchoConfig()
+    {
+        libp2p::protocol::gossip::Config config;
+        config.echo_forward_mode = true;
+        return config;
+    }
+} // namespace
+
 const std::string logger_config( R"(
 # ----------------
 sinks:
@@ -51,8 +65,8 @@ public:
 TEST_F( GossipPubSubTopicTest, TopicSubscription )
 {
     std::vector<std::string> receivedMessages;
-    auto                     pubs = std::make_shared<GossipPubSub>();
-    pubs->Start( 40001, {} );
+    auto                     pubs = std::make_shared<GossipPubSub>( MakeEchoConfig() );
+    ASSERT_FALSE( pubs->Start( 40001, {} ).get() );
 
     GossipPubSubTopic pubsTopic1( pubs, "topic1" );
     pubsTopic1.Subscribe(
@@ -60,8 +74,11 @@ TEST_F( GossipPubSubTopicTest, TopicSubscription )
         {
             if ( message )
             {
-                std::string message( reinterpret_cast<const char *>( message->data.data() ), message->data.size() );
-                receivedMessages.push_back( std::move( message ) );
+                // Distinct name: a local `message` shadows the optional
+                // parameter at its own initializer and fails to compile.
+                std::string received_message( reinterpret_cast<const char *>( message->data.data() ),
+                                              message->data.size() );
+                receivedMessages.push_back( std::move( received_message ) );
             }
         } );
 
@@ -82,8 +99,8 @@ TEST_F( GossipPubSubTopicTest, TopicSubscription )
 TEST_F( GossipPubSubTopicTest, TopicUnsubscription )
 {
     std::vector<std::string> receivedMessages;
-    auto                     pubs = std::make_shared<GossipPubSub>();
-    pubs->Start( 40001, {} );
+    auto                     pubs = std::make_shared<GossipPubSub>( MakeEchoConfig() );
+    ASSERT_FALSE( pubs->Start( 40001, {} ).get() );
 
     GossipPubSubTopic pubsTopic1( pubs, "topic1" );
     pubsTopic1.Subscribe(
@@ -91,8 +108,11 @@ TEST_F( GossipPubSubTopicTest, TopicUnsubscription )
         {
             if ( message )
             {
-                std::string message( reinterpret_cast<const char *>( message->data.data() ), message->data.size() );
-                receivedMessages.push_back( std::move( message ) );
+                // Distinct name: a local `message` shadows the optional
+                // parameter at its own initializer and fails to compile.
+                std::string received_message( reinterpret_cast<const char *>( message->data.data() ),
+                                              message->data.size() );
+                receivedMessages.push_back( std::move( received_message ) );
             }
         } );
 

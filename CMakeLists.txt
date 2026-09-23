@@ -26,8 +26,12 @@ option(BUILD_TESTING "Build tests" OFF)
 if(BUILD_TESTING)
     find_package(GTest CONFIG REQUIRED)
     find_package(yaml-cpp CONFIG REQUIRED)
-    set_target_properties(yaml-cpp PROPERTIES IMPORTED_GLOBAL TRUE)
-    add_library(yaml-cpp::yaml-cpp ALIAS yaml-cpp)
+    # yaml-cpp >= 0.8 exports the namespaced target itself; only promote the
+    # plain target for older configs that define just "yaml-cpp".
+    if(NOT TARGET yaml-cpp::yaml-cpp)
+        set_target_properties(yaml-cpp PROPERTIES IMPORTED_GLOBAL TRUE)
+        add_library(yaml-cpp::yaml-cpp ALIAS yaml-cpp)
+    endif()
     SET(WIN_CRYPT_LIBRARY)
 
     if(NOT UNIX)

@@ -8,6 +8,21 @@
 #include <libp2p/multi/multibase_codec/multibase_codec_impl.hpp>
 
 using GossipPubSub = sgns::ipfs_pubsub::GossipPubSub;
+
+namespace
+{
+    // Several tests are single-node (or use unconnected nodes) and expect the
+    // publisher to deliver to its own subscribers. GossipCore::publish
+    // forwards locally only when echo_forward_mode is on; the production
+    // default is off, so these tests opt in explicitly.
+    libp2p::protocol::gossip::Config MakeEchoConfig()
+    {
+        libp2p::protocol::gossip::Config config;
+        config.echo_forward_mode = true;
+        return config;
+    }
+} // namespace
+
 const std::string logger_config( R"(
 # ----------------
 sinks:
@@ -52,21 +67,27 @@ public:
 TEST_F( GossipPubSubTest, SendMessageToSingleSubscribedTopic )
 {
     std::vector<std::string> receivedMessages;
-    GossipPubSub             pubs;
-    pubs.Start( 40001, {} );
+    GossipPubSub             pubs( MakeEchoConfig() );
+    ASSERT_FALSE( pubs.Start( 40001, {} ).get() );
     auto pubsTopic1 = pubs.Subscribe(
         "topic1",
         [&]( boost::optional<const GossipPubSub::Message &> message )
         {
             if ( message )
             {
-                std::string message( reinterpret_cast<const char *>( message->data.data() ), message->data.size() );
-                receivedMessages.push_back( std::move( message ) );
+                // Distinct name: a local `message` shadows the optional
+                // parameter at its own initializer and fails to compile.
+                std::string received_message( reinterpret_cast<const char *>( message->data.data() ),
+                                              message->data.size() );
+                receivedMessages.push_back( std::move( received_message ) );
             }
         } );
+    // Wait for the subscription: publishing before it completes races the
+    // subscribe handler on the strand.
+    pubsTopic1.get();
 
     std::string message( "topic1_message" );
-    pubs.Publish( "topic1", std::vector<uint8_t>( message.begin(), message.end() ) );
+    ASSERT_TRUE( pubs.Publish( "topic1", std::vector<uint8_t>( message.begin(), message.end() ) ) );
 
     pubs.Stop();
 
@@ -97,6 +118,133 @@ TEST_F( GossipPubSubTest, PublishAfterStopFailsWithoutBlocking )
 }
 
 /**
+ * @given A subscriber whose callback is slow (hundreds of milliseconds)
+ * @when Further messages are published while the callback is still running
+ * @then Publish() returns promptly: consumer work no longer shares the gossip
+ *       strand with publishes. (Before the delivery lane, the slow callback
+ *       held the strand and Publish queued behind it.)
+ */
+TEST_F( GossipPubSubTest, SlowConsumerDoesNotBlockPublishes )
+{
+    std::mutex              received_mutex;
+    std::size_t             received = 0;
+    std::condition_variable all_received;
+    GossipPubSub            pubs( MakeEchoConfig() );
+    ASSERT_FALSE( pubs.Start( 40001, {} ).get() );
+
+    auto subscription = pubs.Subscribe(
+        "slow_consumer_topic",
+        [&]( boost::optional<const GossipPubSub::Message &> message )
+        {
+            if ( !message )
+            {
+                return;
+            }
+            std::this_thread::sleep_for( std::chrono::milliseconds( 300 ) );
+            std::lock_guard<std::mutex> lock( received_mutex );
+            if ( ++received == 2 )
+            {
+                all_received.notify_one();
+            }
+        } );
+    subscription.get();
+
+    const std::vector<uint8_t> payload{ 'm', 's', 'g' };
+    ASSERT_TRUE( pubs.Publish( "slow_consumer_topic", payload ) );
+    // The first delivery is now sleeping on the lane. This publish must not
+    // wait behind it.
+    const auto publish_started = std::chrono::steady_clock::now();
+    ASSERT_TRUE( pubs.Publish( "slow_consumer_topic", payload ) );
+    const auto publish_elapsed = std::chrono::steady_clock::now() - publish_started;
+    EXPECT_LT( publish_elapsed, std::chrono::milliseconds( 200 ) );
+
+    std::unique_lock<std::mutex> lock( received_mutex );
+    ASSERT_TRUE( all_received.wait_for( lock, std::chrono::seconds( 5 ), [&] { return received == 2; } ) );
+
+    pubs.Stop();
+}
+
+/**
+ * @given A subscriber and a burst of messages
+ * @when Stop() is called immediately after publishing, with deliveries still
+ *       queued on the lane
+ * @then Every message gossip delivered before shutdown reaches the consumer
+ *       in order (the drain marker flushes the lane before it exits).
+ */
+TEST_F( GossipPubSubTest, ShutdownDrainsInFlightDeliveries )
+{
+    std::vector<std::size_t> received;
+    std::mutex               received_mutex;
+    GossipPubSub             pubs( MakeEchoConfig() );
+    ASSERT_FALSE( pubs.Start( 40001, {} ).get() );
+
+    constexpr std::size_t kBurstSize = 50;
+    auto subscription = pubs.Subscribe(
+        "drain_topic",
+        [&]( boost::optional<const GossipPubSub::Message &> message )
+        {
+            if ( !message )
+            {
+                return;
+            }
+            std::lock_guard<std::mutex> lock( received_mutex );
+            received.push_back( message->data.size() );
+        } );
+    subscription.get();
+
+    for ( std::size_t i = 0; i < kBurstSize; ++i )
+    {
+        // Distinct payload sizes make ordering observable.
+        ASSERT_TRUE( pubs.Publish( "drain_topic", std::vector<uint8_t>( i + 1, 'x' ) ) );
+    }
+    pubs.Stop();
+
+    std::lock_guard<std::mutex> lock( received_mutex );
+    ASSERT_EQ( received.size(), kBurstSize );
+    for ( std::size_t i = 0; i < kBurstSize; ++i )
+    {
+        EXPECT_EQ( received[i], i + 1 ) << "delivery order violated at " << i;
+    }
+}
+
+/**
+ * @given A subscriber whose callback calls Stop() from the delivery lane
+ * @when A message is delivered and Stop() runs on the lane's own thread
+ * @then shutdown completes without std::terminate: the joinable lane thread
+ *       is detached in the self-thread branch instead of surviving into
+ *       ~thread(). (Regression test for the detach fix.)
+ */
+TEST_F( GossipPubSubTest, StopFromConsumerCallbackDetachesLane )
+{
+    GossipPubSub        pubs( MakeEchoConfig() );
+    std::promise<void>  stopped_from_callback;
+    auto                stopped_future = stopped_from_callback.get_future();
+
+    ASSERT_FALSE( pubs.Start( 40001, {} ).get() );
+
+    auto subscription = pubs.Subscribe(
+        "stop_from_callback_topic",
+        [&]( boost::optional<const GossipPubSub::Message &> message )
+        {
+            if ( !message )
+            {
+                return;
+            }
+            // Runs on the delivery lane thread: Stop() must take the detach
+            // branch, not join itself and not leave a joinable thread for
+            // member destruction to terminate on.
+            pubs.Stop();
+            stopped_from_callback.set_value();
+        } );
+    subscription.get();
+
+    ASSERT_TRUE( pubs.Publish( "stop_from_callback_topic", std::vector<uint8_t>{ 's' } ) );
+    ASSERT_EQ( stopped_future.wait_for( std::chrono::seconds( 5 ) ), std::future_status::ready );
+    // pubs destructs here while the (detached) lane thread finishes.
+    SUCCEED();
+}
+
+/**
  * @given A pubsub service which is subscribed to a single topic
  * @when A message is published to a topic that the service is not subscribed to.
  * @then No messages received.
@@ -105,20 +253,24 @@ TEST_F( GossipPubSubTest, SendMessageToUnsubscribedTopic )
 {
     std::vector<std::string> receivedMessages;
     GossipPubSub             pubs;
-    pubs.Start( 40001, {} );
+    ASSERT_FALSE( pubs.Start( 40001, {} ).get() );
     auto pubsTopic1 = pubs.Subscribe(
         "topic1",
         [&]( boost::optional<const GossipPubSub::Message &> message )
         {
             if ( message )
             {
-                std::string message( reinterpret_cast<const char *>( message->data.data() ), message->data.size() );
-                receivedMessages.push_back( std::move( message ) );
+                // Distinct name: a local `message` shadows the optional
+                // parameter at its own initializer and fails to compile.
+                std::string received_message( reinterpret_cast<const char *>( message->data.data() ),
+                                              message->data.size() );
+                receivedMessages.push_back( std::move( received_message ) );
             }
         } );
+    pubsTopic1.get();
 
     std::string message( "topic2_message" );
-    pubs.Publish( "topic2", std::vector<uint8_t>( message.begin(), message.end() ) );
+    ASSERT_TRUE( pubs.Publish( "topic2", std::vector<uint8_t>( message.begin(), message.end() ) ) );
 
     ASSERT_EQ( receivedMessages.size(), 0 );
 }
@@ -132,18 +284,20 @@ TEST_F( GossipPubSubTest, MessagesMutiplexing )
 {
     std::vector<std::string> receivedMessagesTopic1;
     std::vector<std::string> receivedMessagesTopic2;
-    GossipPubSub             pubs;
-    pubs.Start( 40001, {} );
+    GossipPubSub             pubs( MakeEchoConfig() );
+    ASSERT_FALSE( pubs.Start( 40001, {} ).get() );
     auto pubsTopic1 = pubs.Subscribe(
         "topic1",
         [&]( boost::optional<const GossipPubSub::Message &> message )
         {
             if ( message )
             {
-                std::string message( reinterpret_cast<const char *>( message->data.data() ), message->data.size() );
-                receivedMessagesTopic1.push_back( std::move( message ) );
+                std::string received_message( reinterpret_cast<const char *>( message->data.data() ),
+                                                      message->data.size() );
+                receivedMessagesTopic1.push_back( std::move( received_message ) );
             }
         } );
+    pubsTopic1.get();
 
     auto pubsTopic2 = pubs.Subscribe(
         "topic2",
@@ -151,16 +305,18 @@ TEST_F( GossipPubSubTest, MessagesMutiplexing )
         {
             if ( message )
             {
-                std::string message( reinterpret_cast<const char *>( message->data.data() ), message->data.size() );
-                receivedMessagesTopic2.push_back( std::move( message ) );
+                std::string received_message( reinterpret_cast<const char *>( message->data.data() ),
+                                                      message->data.size() );
+                receivedMessagesTopic2.push_back( std::move( received_message ) );
             }
         } );
+    pubsTopic2.get();
 
     std::string messageTopic1( "topic1_message" );
-    pubs.Publish( "topic1", std::vector<uint8_t>( messageTopic1.begin(), messageTopic1.end() ) );
+    ASSERT_TRUE( pubs.Publish( "topic1", std::vector<uint8_t>( messageTopic1.begin(), messageTopic1.end() ) ) );
 
     std::string messageTopic2( "topic2_message" );
-    pubs.Publish( "topic2", std::vector<uint8_t>( messageTopic2.begin(), messageTopic2.end() ) );
+    ASSERT_TRUE( pubs.Publish( "topic2", std::vector<uint8_t>( messageTopic2.begin(), messageTopic2.end() ) ) );
 
     pubs.Stop();
 
@@ -180,20 +336,22 @@ TEST_F( GossipPubSubTest, MutipleGossipSubObjectsOnDifferentChannels )
 {
     std::vector<std::string> receivedMessagesTopic1;
     std::vector<std::string> receivedMessagesTopic2;
-    GossipPubSub             pubs1;
-    pubs1.Start( 40001, {} );
-    GossipPubSub pubs2;
-    pubs2.Start( 40002, {} );
+    GossipPubSub             pubs1( MakeEchoConfig() );
+    ASSERT_FALSE( pubs1.Start( 40001, {} ).get() );
+    GossipPubSub pubs2( MakeEchoConfig() );
+    ASSERT_FALSE( pubs2.Start( 40002, {} ).get() );
     auto pubsTopic1 = pubs1.Subscribe(
         "topic1",
         [&]( boost::optional<const GossipPubSub::Message &> message )
         {
             if ( message )
             {
-                std::string message( reinterpret_cast<const char *>( message->data.data() ), message->data.size() );
-                receivedMessagesTopic1.push_back( std::move( message ) );
+                std::string received_message( reinterpret_cast<const char *>( message->data.data() ),
+                                                      message->data.size() );
+                receivedMessagesTopic1.push_back( std::move( received_message ) );
             }
         } );
+    pubsTopic1.get();
 
     auto pubsTopic2 = pubs2.Subscribe(
         "topic2",
@@ -201,16 +359,18 @@ TEST_F( GossipPubSubTest, MutipleGossipSubObjectsOnDifferentChannels )
         {
             if ( message )
             {
-                std::string message( reinterpret_cast<const char *>( message->data.data() ), message->data.size() );
-                receivedMessagesTopic2.push_back( std::move( message ) );
+                std::string received_message( reinterpret_cast<const char *>( message->data.data() ),
+                                                      message->data.size() );
+                receivedMessagesTopic2.push_back( std::move( received_message ) );
             }
         } );
+    pubsTopic2.get();
 
     std::string messageTopic1( "topic1_message" );
-    pubs1.Publish( "topic1", std::vector<uint8_t>( messageTopic1.begin(), messageTopic1.end() ) );
+    ASSERT_TRUE( pubs1.Publish( "topic1", std::vector<uint8_t>( messageTopic1.begin(), messageTopic1.end() ) ) );
 
     std::string messageTopic2( "topic2_message" );
-    pubs2.Publish( "topic2", std::vector<uint8_t>( messageTopic2.begin(), messageTopic2.end() ) );
+    ASSERT_TRUE( pubs2.Publish( "topic2", std::vector<uint8_t>( messageTopic2.begin(), messageTopic2.end() ) ) );
 
     pubs1.Stop();
     pubs2.Stop();
@@ -231,10 +391,10 @@ TEST_F( GossipPubSubTest, MutipleGossipSubObjectsOnSingleChannel )
 {
     std::vector<std::string> receivedMessagesPubs1Topic1;
     std::vector<std::string> receivedMessagesPubs2Topic1;
-    GossipPubSub             pubs1;
-    pubs1.Start( 40001, {} );
-    GossipPubSub pubs2;
-    pubs2.Start( 40001, { pubs1.GetLocalAddress() } );
+    GossipPubSub             pubs1( MakeEchoConfig() );
+    ASSERT_FALSE( pubs1.Start( 40001, {} ).get() );
+    GossipPubSub pubs2( MakeEchoConfig() );
+    ASSERT_FALSE( pubs2.Start( 40001, { pubs1.GetLocalAddress() } ).get() );
 
     auto pubs1Topic1 = pubs1.Subscribe(
         "topic1",
@@ -242,8 +402,9 @@ TEST_F( GossipPubSubTest, MutipleGossipSubObjectsOnSingleChannel )
         {
             if ( message )
             {
-                std::string message( reinterpret_cast<const char *>( message->data.data() ), message->data.size() );
-                receivedMessagesPubs1Topic1.push_back( std::move( message ) );
+                std::string received_message( reinterpret_cast<const char *>( message->data.data() ),
+                                                      message->data.size() );
+                receivedMessagesPubs1Topic1.push_back( std::move( received_message ) );
             }
         } );
 
@@ -253,8 +414,9 @@ TEST_F( GossipPubSubTest, MutipleGossipSubObjectsOnSingleChannel )
         {
             if ( message )
             {
-                std::string message( reinterpret_cast<const char *>( message->data.data() ), message->data.size() );
-                receivedMessagesPubs2Topic1.push_back( std::move( message ) );
+                std::string received_message( reinterpret_cast<const char *>( message->data.data() ),
+                                                      message->data.size() );
+                receivedMessagesPubs2Topic1.push_back( std::move( received_message ) );
             }
         } );
 
@@ -262,10 +424,22 @@ TEST_F( GossipPubSubTest, MutipleGossipSubObjectsOnSingleChannel )
     pubs1Topic1.wait();
     pubs2Topic1.wait();
 
-    std::this_thread::sleep_for( std::chrono::milliseconds( 100 ) );
+    // Wait until pubs2 sees pubs1 subscribed on the wire: publishing before
+    // the gossip subscription exchange completes drops the message (no mesh
+    // and no fanout candidates yet). A fixed sleep races the heartbeat.
+    bool peer_seen = false;
+    for ( int i = 0; i < 100 && !peer_seen; ++i )
+    {
+        peer_seen = pubs2.getPeerCount( "topic1" ) > 0;
+        if ( !peer_seen )
+        {
+            std::this_thread::sleep_for( std::chrono::milliseconds( 50 ) );
+        }
+    }
+    ASSERT_TRUE( peer_seen ) << "pubs2 never learned of pubs1's subscription";
 
     std::string messageTopic1( "topic1_message" );
-    pubs2.Publish( "topic1", std::vector<uint8_t>( messageTopic1.begin(), messageTopic1.end() ) );
+    ASSERT_TRUE( pubs2.Publish( "topic1", std::vector<uint8_t>( messageTopic1.begin(), messageTopic1.end() ) ) );
 
     // Wait for message transmitting
     std::this_thread::sleep_for( std::chrono::seconds( 2 ) );
@@ -300,23 +474,26 @@ TEST_F( GossipPubSubTest, CancelSubscription )
     std::vector<std::string> receivedMessages;
 
     GossipPubSub pubs( keyPair );
-    pubs.Start( 40001, {} );
+    ASSERT_FALSE( pubs.Start( 40001, {} ).get() );
     auto pubsTopic1 = pubs.Subscribe(
         "topic1",
         [&]( boost::optional<const GossipPubSub::Message &> message )
         {
             if ( message )
             {
-                std::string message( reinterpret_cast<const char *>( message->data.data() ), message->data.size() );
-                receivedMessages.push_back( std::move( message ) );
+                // Distinct name: a local `message` shadows the optional
+                // parameter at its own initializer and fails to compile.
+                std::string received_message( reinterpret_cast<const char *>( message->data.data() ),
+                                              message->data.size() );
+                receivedMessages.push_back( std::move( received_message ) );
             }
         } );
 
     // Cancel sunscription before message publishing
-    pubsTopic1.get().cancel();
+    pubsTopic1.get()->cancel();
 
     std::string message( "topic1_message" );
-    pubs.Publish( "topic1", std::vector<uint8_t>( message.begin(), message.end() ) );
+    ASSERT_TRUE( pubs.Publish( "topic1", std::vector<uint8_t>( message.begin(), message.end() ) ) );
 
     pubs.Stop();
 
