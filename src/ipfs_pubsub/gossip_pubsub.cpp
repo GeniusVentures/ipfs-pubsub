@@ -614,7 +614,11 @@ namespace sgns::ipfs_pubsub
             {
                 if ( !ec )
                 {
-                    StartFindingPeers( cid );
+                    auto findResult = StartFindingPeers( cid );
+                    if ( !findResult )
+                    {
+                        m_logger->error( "DHT: Failed to start finding peers: {}", findResult.error().message() );
+                    }
                 }
                 else
                 {
@@ -638,7 +642,11 @@ namespace sgns::ipfs_pubsub
                 if ( !ec )
                 {
                     m_logger->debug( "DHT: Start Next Find" );
-                    StartFindingPeers( cid );
+                    auto findResult = StartFindingPeers( cid );
+                    if ( !findResult )
+                    {
+                        m_logger->error( "DHT: Failed to start finding peers: {}", findResult.error().message() );
+                    }
                 }
                 else
                 {
@@ -657,7 +665,11 @@ namespace sgns::ipfs_pubsub
         for ( auto &cid : m_provideCids )
         {
             // Use force=false to enable periodic re-providing
-            dht_->ProvideCID( cid, true, false );
+            auto provideResult = dht_->ProvideCID( cid, true, false );
+            if ( !provideResult )
+            {
+                m_logger->error( "DHT: Failed to provide CID: {}", provideResult.error().message() );
+            }
         }
         m_provideCids.clear();
     }
@@ -1393,7 +1405,12 @@ namespace sgns::ipfs_pubsub
             for ( const auto &cid : m_provideCids )
             {
                 // Use force=true for immediate republish, need_err=true, no automatic rescheduling
-                dht_->ProvideCID( cid, true, true );
+                auto provideResult = dht_->ProvideCID( cid, true, true );
+                if ( !provideResult )
+                {
+                    m_logger->error( "DHT: Failed to republish CID after network change: {}",
+                                     provideResult.error().message() );
+                }
             }
         }
 

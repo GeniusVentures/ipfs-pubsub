@@ -72,5 +72,6 @@ namespace sgns::ipfs_pubsub
         std::shared_ptr<GossipPubSub>                     m_gossipPubSub;
         std::string                                       m_topic;
         std::shared_future<std::shared_ptr<Subscription>> m_subscription;
+        Logger                                            m_logger = createLogger( "GossipPubSubTopic" );
     };
 }

@@ -45,7 +45,11 @@ namespace sgns::ipfs_pubsub
 
     void GossipPubSubTopic::Publish( const std::vector<uint8_t> &message )
     {
-        m_gossipPubSub->Publish( m_topic, message );
+        auto publishResult = m_gossipPubSub->Publish( m_topic, message );
+        if ( !publishResult )
+        {
+            m_logger->error( "Failed to publish message to topic '{}': {}", m_topic, publishResult.error().message() );
+        }
     }
 
     void GossipPubSubTopic::Unsubscribe()
