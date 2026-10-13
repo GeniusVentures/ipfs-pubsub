@@ -1,6 +1,7 @@
-// GossipSub outbound resource-bounds tests (Phase 3, plan 03-01 — TEST-02(b)).
+// GossipSub resource-bounds tests (Phase 3 — TEST-02(b) from plan 03-01,
+// TEST-02(a)/(c) from plan 03-02).
 //
-// Cases (Task 1 tracer):
+// Cases (03-01 Task 1 tracer):
 //   - GossipPubSubBoundsTest.SustainedOverflowClosesStreamAndBlocksPeer
 //     A remote slow-reader peer can no longer grow the local node's outbound
 //     state: every oversized RPC is dropped at Stream::write() entry
@@ -10,6 +11,29 @@
 //     (IsPeerBlocked == false, D-09 single-episode tolerance), and after
 //     re-dial + re-offend, close 2 escalates through the existing BlockPeer()
 //     chain into DenyListConnectionGater (D-10) — IsPeerBlocked == true.
+//
+// Cases (03-02, TEST-02(a)/(c) — completes the five-case suite):
+//   - GossipPubSubBoundsTest.SubscribeCapBoundsRemoteSubscriptions
+//     GOSS-01 receiver-side cumulative per-peer subscription cap: two hosted
+//     nodes, cap = 3 in test config; the subscriber's T1..T3 are learned by
+//     the observer (cap-th admitted), T4 stays unknown (cap+1-th ignored at
+//     onPeerSubscribed — check-then-insert, no table mutation on rejection,
+//     D-03), and triple duplicate re-subscription of T1 changes nothing
+//     (dedup precedes the cap check — duplicates never consume headroom).
+//   - GossipPubSubBoundsTest.SweepCollectsTopicAfterUnsubscribeAndResubscribeRelearns
+//     D-04 sweep/liveness: learn -> empty-after-unsubscribe (dead entry is
+//     sweep-eligible; empty() = not self-subscribed, no fanout, no
+//     subscribers, no mesh) -> re-learn (the sweep never breaks
+//     re-subscription).
+//
+// Cases (03-01 scope, pre-drafted during 03-01 and committed with 03-02):
+//   - GossipPubSubBoundsTest.BelowCapAdmittedAboveCapDroppedAtEntry
+//     Egress admission boundary: below-cap writes admitted (peer stays
+//     known/unblocked), above-cap series closes via the bounded cycle.
+//   - GossipPubSubBoundsTest.BlockedPeerRedialRejected
+//     Gater enforcement after a block: the redial is rejected, the
+//     subscription never learned, block persists. Runs LAST on purpose —
+//     nothing may follow the shared raw fixture's final teardown.
 //
 // Determinism contract (D-11, documented deviation):
 //   Determinism comes from configuration + bounded idempotent waits, NOT from
@@ -55,6 +79,7 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/executor_work_guard.hpp>
 
+#include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <condition_variable>
@@ -90,6 +115,39 @@ namespace
         config.overflow_close_threshold     = 3;                                   // K = 3
         // max_message_size stays at its 16 MiB default — larger than any payload here
         return config;
+    }
+
+    /// Subscription-cap variant (TEST-02(a)/(c), plan 03-02): the GOSS-01
+    /// ingress boundary under test — a remote peer may hold at most 3
+    /// admitted remote subscriptions. Egress knobs keep their 03-01 values
+    /// (irrelevant to these cases; no oversized writes ever happen here).
+    libp2p::protocol::gossip::Config MakeSubscriptionCapConfig()
+    {
+        auto config                          = MakeBoundsConfig();
+        config.max_remote_subscriptions_per_peer = 3;
+        return config;
+    }
+
+    /// Extracts a hosted node's own PeerId from its interface address
+    /// ("<interface multiaddr>/ipfs/<peerID>" — gossip_pubsub.hpp contract).
+    libp2p::peer::PeerId SelfPeerIdOf( GossipPubSub &pubs )
+    {
+        const std::string addr      = pubs.GetInterfaceAddress();
+        const auto        ipfs_pos  = addr.find( "/ipfs/" );
+        const auto        p2p_pos   = addr.find( "/p2p/" );
+        assert( ipfs_pos != std::string::npos || p2p_pos != std::string::npos );
+        const std::string marker    = ipfs_pos != std::string::npos ? "/ipfs/" : "/p2p/";
+        const auto        pos       = ipfs_pos != std::string::npos ? ipfs_pos : p2p_pos;
+        auto id_res = libp2p::peer::PeerId::fromBase58( addr.substr( pos + marker.size() ) );
+        assert( id_res );
+        return std::move( id_res.value() );
+    }
+
+    /// True iff `peers` contains `id`.
+    bool ContainsPeer( const std::vector<libp2p::peer::PeerId> &peers,
+                       const libp2p::peer::PeerId              &id )
+    {
+        return std::find( peers.begin(), peers.end(), id ) != peers.end();
     }
 
     /// Generates a fresh Ed25519 key pair so every host has a distinct
@@ -183,6 +241,15 @@ namespace
 
         ~RawGossipPeer()
         {
+            {
+                std::lock_guard<std::mutex> lock( m_streams_mutex );
+                m_streams.clear();
+            }
+            // Tear the network stack down FIRST, while its io_context is
+            // still alive and its thread still running — member order alone
+            // would destroy the context before the host (its sockets) and
+            // corrupt state for tests that run later in this process.
+            m_host.reset();
             m_work.reset();
             m_context->stop();
             if ( m_runner.joinable() )
@@ -197,6 +264,21 @@ namespace
         const libp2p::peer::PeerId id() const
         {
             return m_host->getPeerInfo().id;
+        }
+
+        /// Closes every connection to the last-dialed peer
+        /// (Host::disconnect). Needed before a re-dial that must exercise
+        /// the NEW-connection path — the gater does not terminate live
+        /// connections, and a dial over an existing connection is not
+        /// intercepted by it.
+        void DisconnectDialed()
+        {
+            std::lock_guard<std::mutex> lock( m_streams_mutex );
+            m_streams.clear();
+            if ( m_last_dialed )
+            {
+                m_host->disconnect( *m_last_dialed );
+            }
         }
 
         /// Dials the node at `address` (multiaddress string with /p2p/<id>),
@@ -239,6 +321,7 @@ namespace
                 return false;
             }
             peer_info.addresses.assign( 1, std::move( bare_ma_res.value() ) );
+            m_last_dialed = peer_info.id;
 
             std::mutex              m;
             std::condition_variable cv;
@@ -305,7 +388,22 @@ namespace
         std::mutex                                     m_streams_mutex;
         std::vector<std::shared_ptr<libp2p::connection::Stream>> m_streams;
         std::string                                    m_last_error;
+        std::optional<libp2p::peer::PeerId>            m_last_dialed;
     };
+
+    /// Process-wide raw fixture. A SECOND freshly-constructed host+
+    /// io_context in the same process reliably hangs its first dial (seen
+    /// with --gtest_repeat=2 and in the full suite; root cause not chased —
+    /// out of this phase's scope), while one instance serves any number of
+    /// dials, disconnects, and re-dials across tests. Block state lives on
+    /// each test's own node instance, so a stable fixture identity is
+    /// exactly the deployment shape under test (one remote peer, many
+    /// nodes).
+    RawGossipPeer &SharedRawPeer()
+    {
+        static RawGossipPeer peer;
+        return peer;
+    }
 
 } // namespace
 
@@ -424,7 +522,7 @@ TEST_F( GossipPubSubBoundsTest, SustainedOverflowClosesStreamAndBlocksPeer )
         kBoundsTopic, []( boost::optional<const GossipPubSub::Message &> ) {} );
     sub.get();
 
-    RawGossipPeer raw;
+    RawGossipPeer &raw = SharedRawPeer();
     ASSERT_TRUE( raw.DialAndSubscribe( LoopbackAddress( pubs ), kBoundsTopic ) )
         << "raw fixture could not dial/subscribe: " << raw.LastError()
         << " (address was: '" << LoopbackAddress( pubs ) << "')";
@@ -456,6 +554,252 @@ TEST_F( GossipPubSubBoundsTest, SustainedOverflowClosesStreamAndBlocksPeer )
 
     // GOSS-03: the 2nd sustained-overflow close reached the gater via the
     // existing BlockPeer() chain; permanent until UnblockPeer() (D-10).
+    EXPECT_TRUE( pubs.IsPeerBlocked( raw.id() ) );
+
+    pubs.Stop();
+}
+
+/**
+ * @given Two hosted GossipPubSub nodes connected over loopback (ephemeral
+ *        ports, pubsub_counts mechanics), the observing node configured
+ *        with max_remote_subscriptions_per_peer = 3
+ * @when The subscriber node subscribes to four topics T1..T4 via the public
+ *       Subscribe() API, then re-subscribes T1 three more times
+ * @then T1, T2 and T3 are learned by the observer (the cap-th topic IS
+ *       admitted — the boundary one step under), T4 stays unknown across a
+ *       bounded settling wait (the cap+1-th topic ignored — the boundary one
+ *       step over, GOSS-01), and the duplicate re-subscriptions change
+ *       nothing (duplicates never consume headroom — the precision edge:
+ *       dedup precedes the cap check, so a re-sent subscribe is an exact
+ *       set-membership hit, never both counted and rejected).
+ *
+ * Placement note: hosted-node cases (this one and the sweep case below) are
+ * registered BEFORE the raw-fixture cases — nothing may run after
+ * BlockedPeerRedialRejected's shared-raw-peer teardown (lingering fixture
+ * callbacks can crash a following test's SetUp — observed as SEH 0xc0000005
+ * when this case originally followed it; order-only, no assertion change).
+ */
+TEST_F( GossipPubSubBoundsTest, SubscribeCapBoundsRemoteSubscriptions )
+{
+    GossipPubSub nodeA( MakeSubscriptionCapConfig() );
+    GossipPubSub nodeB( MakeSubscriptionCapConfig() );
+    ASSERT_FALSE( nodeA.Start( 0, {} ).get() ); // ephemeral ports (Pitfall 1)
+    ASSERT_FALSE( nodeB.Start( 0, {} ).get() );
+    nodeB.AddPeers( { nodeA.GetInterfaceAddress() } ); // pubsub_counts mechanics
+
+    const libp2p::peer::PeerId bId = SelfPeerIdOf( nodeB );
+
+    const std::string t1 = "gossip_sub_cap_t1";
+    const std::string t2 = "gossip_sub_cap_t2";
+    const std::string t3 = "gossip_sub_cap_t3";
+    const std::string t4 = "gossip_sub_cap_t4"; // the cap+1-th topic
+
+    // B subscribes T1..T4 via the public API; all subscriptions stay alive
+    // for the whole test (a Subscription destructor cancels).
+    std::vector<std::shared_future<std::shared_ptr<GossipPubSub::Subscription>>> subs;
+    for ( const auto &topic : { t1, t2, t3, t4 } )
+    {
+        subs.push_back( nodeB.Subscribe(
+            topic, []( boost::optional<const GossipPubSub::Message &> ) {} ) );
+        subs.back().get();
+    }
+
+    // Bounded idempotent wait: A learned B on T1 (and then T2/T3 — all three
+    // admitted; ordering on the wire follows the Subscribe() call order).
+    ASSERT_TRUE( WaitFor( [&] { return ContainsPeer( nodeA.getAllPeers( t1 ), bId ); },
+                          200, kHeartbeat ) )
+        << "observer never learned the cap-th-below subscriptions";
+    ASSERT_TRUE( ContainsPeer( nodeA.getAllPeers( t2 ), bId ) );
+    ASSERT_TRUE( ContainsPeer( nodeA.getAllPeers( t3 ), bId ) );
+
+    // Bounded settling wait: T4 is never learned (the cap+1-th subscription
+    // is ignored at onPeerSubscribed — no table mutation ever happens for
+    // it, so the entry stays empty and sweep-eligible, D-04).
+    std::this_thread::sleep_for( kHeartbeat * 8 );
+    EXPECT_TRUE( nodeA.getAllPeers( t4 ).empty() )
+        << "cap+1-th subscription was admitted — GOSS-01 cap not enforced";
+
+    // Precision edge: B re-subscribes T1 three more times; duplicates are
+    // exact set-membership hits at the dedup early-return and never reach
+    // the cap check — A's view must be unchanged (still exactly B on T1,
+    // T2/T3 unaffected, T4 still ignored).
+    for ( int i = 0; i < 3; ++i )
+    {
+        subs.push_back( nodeB.Subscribe(
+            t1, []( boost::optional<const GossipPubSub::Message &> ) {} ) );
+        subs.back().get();
+        std::this_thread::sleep_for( kHeartbeat * 2 ); // bounded pacing
+    }
+    std::this_thread::sleep_for( kHeartbeat * 4 ); // bounded settle
+    EXPECT_EQ( nodeA.getAllPeers( t1 ).size(), 1 )
+        << "duplicate subscriptions changed the admitted set";
+    EXPECT_TRUE( ContainsPeer( nodeA.getAllPeers( t1 ), bId ) );
+    EXPECT_TRUE( ContainsPeer( nodeA.getAllPeers( t2 ), bId ) );
+    EXPECT_TRUE( ContainsPeer( nodeA.getAllPeers( t3 ), bId ) );
+    EXPECT_TRUE( nodeA.getAllPeers( t4 ).empty() );
+
+    nodeA.Stop();
+    nodeB.Stop();
+}
+
+/**
+ * @given Two hosted GossipPubSub nodes connected over loopback with a tiny
+ *        heartbeat interval (25 ms), B subscribed to a single topic T1 that
+ *        A has learned
+ * @when B unsubscribes from T1 through the public path (Subscription::cancel
+ *       — no public Unsubscribe(topic) exists on GossipPubSub; the
+ *       subscription object IS the public unsubscribe path), then
+ *       re-subscribes to T1
+ * @then A's peer table for T1 empties after the unsubscribe (the entry is
+ *       dead: no self-subscription, no fanout, no subscribers, no mesh —
+       sweep-eligible on the very next heartbeat, D-04) and the
+ *       re-subscription is learned again (liveness after collection — the
+ *       sweep prunes without ever breaking re-subscription).
+ */
+TEST_F( GossipPubSubBoundsTest, SweepCollectsTopicAfterUnsubscribeAndResubscribeRelearns )
+{
+    GossipPubSub nodeA( MakeSubscriptionCapConfig() ); // tiny heartbeat; cap irrelevant (1 topic)
+    GossipPubSub nodeB( MakeSubscriptionCapConfig() );
+    ASSERT_FALSE( nodeA.Start( 0, {} ).get() ); // ephemeral ports (Pitfall 1)
+    ASSERT_FALSE( nodeB.Start( 0, {} ).get() );
+    nodeB.AddPeers( { nodeA.GetInterfaceAddress() } );
+
+    const libp2p::peer::PeerId bId = SelfPeerIdOf( nodeB );
+    const std::string         t1  = "gossip_sweep_topic";
+
+    // Learn: B subscribes T1 -> A's table holds B on T1.
+    auto subT1 = nodeB.Subscribe(
+        t1, []( boost::optional<const GossipPubSub::Message &> ) {} );
+    subT1.get();
+    ASSERT_TRUE( WaitFor( [&] { return ContainsPeer( nodeA.getAllPeers( t1 ), bId ); },
+                          200, kHeartbeat ) )
+        << "observer never learned the initial subscription";
+
+    // Unsubscribe via the public path: A's entry for T1 loses its last
+    // subscriber and empties (heartbeat-paced, bounded idempotent wait).
+    subT1.get()->cancel();
+    ASSERT_TRUE( WaitFor( [&] { return nodeA.getAllPeers( t1 ).empty(); },
+                          200, kHeartbeat ) )
+        << "dead topic entry was not collected after unsubscribe";
+
+    // Liveness after collection: B re-subscribes T1 -> A re-learns (the
+    // sweep never breaks re-subscription).
+    auto subAgain = nodeB.Subscribe(
+        t1, []( boost::optional<const GossipPubSub::Message &> ) {} );
+    subAgain.get();
+    ASSERT_TRUE( WaitFor( [&] { return ContainsPeer( nodeA.getAllPeers( t1 ), bId ); },
+                          200, kHeartbeat ) )
+        << "re-subscription after sweep was not re-learned";
+
+    nodeA.Stop();
+    nodeB.Stop();
+}
+
+/**
+ * @given A gossip node with a 4 KiB outbound pending cap (K=3) subscribed to
+ *        a topic, and a raw slow-reader peer subscribed to the same topic
+ * @when A paced series of BELOW-cap (~1 KiB) publishes flows to the peer,
+ *       then the payload switches to above-cap (~64 KiB)
+ * @then The below-cap series is admitted (the peer stays known on the topic
+ *       and unblocked — one step under the boundary never drops and never
+ *       closes), and the above-cap series closes the stream via the bounded
+ *       cycle observable (one step over the boundary drops at entry, K drops
+ *       close). Never asserts an exact drop count after a burst (Pitfall 2).
+ */
+TEST_F( GossipPubSubBoundsTest, BelowCapAdmittedAboveCapDroppedAtEntry )
+{
+    GossipPubSub pubs( MakeBoundsConfig() );
+    ASSERT_FALSE( pubs.Start( 40302, {} ).get() ); // distinct port (Pitfall 1)
+
+    auto sub = pubs.Subscribe(
+        kBoundsTopic, []( boost::optional<const GossipPubSub::Message &> ) {} );
+    sub.get();
+
+    RawGossipPeer &raw = SharedRawPeer();
+    ASSERT_TRUE( raw.DialAndSubscribe( LoopbackAddress( pubs ), kBoundsTopic ) )
+        << "raw fixture could not dial/subscribe: " << raw.LastError();
+
+    ASSERT_TRUE( WaitFor( [&] { return pubs.getPeerCount( kBoundsTopic ) > 0; }, 200, kHeartbeat ) )
+        << "node never learned the raw peer's subscription";
+    std::this_thread::sleep_for( kHeartbeat * 4 ); // mesh settle (bounded, idempotent)
+
+    // Phase 1 — below the cap: ~1 KiB payloads serialize well under the
+    // 4 KiB cap; every write is admitted. Paced by >= one heartbeat per
+    // publish (never burst-then-count).
+    const std::vector<uint8_t> small_payload( 1024, 0x01 );
+    for ( int i = 0; i < 10; ++i )
+    {
+        auto res = pubs.Publish( kBoundsTopic, small_payload );
+        ASSERT_TRUE( res.has_value() );
+        std::this_thread::sleep_for( kHeartbeat * 3 );
+        // admitted writes never drop and never close: the peer stays known
+        // (asserted inside the paced loop, one step under the boundary)
+        ASSERT_GT( pubs.getPeerCount( kBoundsTopic ), 0 )
+            << "below-cap publish dropped/closed the stream (iteration " << i << ")";
+    }
+    EXPECT_FALSE( pubs.IsPeerBlocked( raw.id() ) );
+
+    // Phase 2 — above the cap: the same fixture, switched to ~64 KiB
+    // payloads; the bounded overflow-cycle observable terminates on close.
+    ASSERT_TRUE( OverflowUntilPeerForgotten( pubs ) )
+        << "above-cap series did not close the stream";
+
+    pubs.Stop();
+}
+
+/**
+ * @given A gossip node that has blocked a raw peer after two sustained-
+ *        overflow closes (the tracer's two-cycle drive)
+ * @when The blocked peer disconnects and attempts ONE more dial + subscribe
+ * @then The gater rejects the new connection: the subscription is never
+ *       learned (getAllPeers stays empty across a bounded settling wait) and
+ *       IsPeerBlocked remains true. Asserts gater enforcement without
+ *       asserting the death of any live connection (the block applies to
+ *       new connection attempts only).
+ */
+TEST_F( GossipPubSubBoundsTest, BlockedPeerRedialRejected )
+{
+    GossipPubSub pubs( MakeBoundsConfig() );
+    ASSERT_FALSE( pubs.Start( 40303, {} ).get() ); // distinct port (Pitfall 1)
+
+    auto sub = pubs.Subscribe(
+        kBoundsTopic, []( boost::optional<const GossipPubSub::Message &> ) {} );
+    sub.get();
+
+    RawGossipPeer &raw = SharedRawPeer();
+    ASSERT_TRUE( raw.DialAndSubscribe( LoopbackAddress( pubs ), kBoundsTopic ) )
+        << "raw fixture could not dial/subscribe: " << raw.LastError();
+
+    // Two-cycle drive to a block (tracer idiom): close 1 tolerated...
+    ASSERT_TRUE( WaitFor( [&] { return pubs.getPeerCount( kBoundsTopic ) > 0; }, 200, kHeartbeat ) );
+    std::this_thread::sleep_for( kHeartbeat * 4 );
+    ASSERT_TRUE( OverflowUntilPeerForgotten( pubs ) ) << "cycle 1 did not close";
+    ASSERT_FALSE( pubs.IsPeerBlocked( raw.id() ) );
+
+    // ...re-dial + re-offend, close 2 blocks.
+    ASSERT_TRUE( raw.DialAndSubscribe( LoopbackAddress( pubs ), kBoundsTopic ) )
+        << "raw fixture could not re-dial after the first close: " << raw.LastError();
+    ASSERT_TRUE( WaitFor( [&] { return pubs.getPeerCount( kBoundsTopic ) > 0; }, 200, kHeartbeat ) );
+    std::this_thread::sleep_for( kHeartbeat * 4 );
+    ASSERT_TRUE( OverflowUntilPeerForgotten( pubs ) ) << "cycle 2 did not close";
+    ASSERT_TRUE( pubs.IsPeerBlocked( raw.id() ) );
+
+    // Force the NEW-connection path (the gater never terminates the still-
+    // live connection), then attempt exactly one more dial + subscribe.
+    raw.DisconnectDialed();
+    std::this_thread::sleep_for( kHeartbeat * 4 ); // bounded settle after teardown
+
+    // The dial result itself is not the assert surface (rejection may
+    // surface as an error here or later); the gater's effect is that the
+    // subscription is never learned.
+    std::ignore = raw.DialAndSubscribe( LoopbackAddress( pubs ), kBoundsTopic );
+
+    // Bounded negative wait: the peer table stays empty (the gater rejected
+    // the new connection — no subscription exchange ever happened) and the
+    // block persists (D-10).
+    std::this_thread::sleep_for( std::chrono::milliseconds( 500 ) );
+    EXPECT_EQ( pubs.getPeerCount( kBoundsTopic ), 0 )
+        << "blocked peer's subscription was learned — gater did not reject the redial";
     EXPECT_TRUE( pubs.IsPeerBlocked( raw.id() ) );
 
     pubs.Stop();
