@@ -49,6 +49,13 @@ namespace
     // crossing, on the message that crosses it).
     constexpr std::size_t kDeliveryDepthWarning = 10000;
 
+    // GOSS-03 (D-09): number of sustained-overflow stream closes of the same
+    // peer before escalation to BlockPeer(). Two closes = one tolerated
+    // episode (e.g. a single legitimate large CRDT burst) before a
+    // reconnect-and-reoffend peer is blocked. The block is permanent until
+    // UnblockPeer() (D-10).
+    constexpr std::size_t kSustainedOverflowClosesToBlock = 2;
+
     std::string ToString( const std::vector<uint8_t> &buf )
     {
         // NOLINTNEXTLINE
@@ -305,6 +312,31 @@ namespace sgns::ipfs_pubsub
             injector.template create<std::shared_ptr<libp2p::crypto::CryptoProvider>>(),
             injector.template create<std::shared_ptr<libp2p::crypto::marshaller::KeyMarshaller>>(),
             config_ );
+
+        // GOSS-03 (D-08): register the violation handler immediately after
+        // gossip creation, strictly before Start() -- m_connection_gater
+        // already exists (created in Init()). The handler only counts closes
+        // under a mutex and escalates via the existing BlockPeer() chain
+        // (counter + mutex-gater work only, exception-safe).
+        m_gossip->setViolationHandler(
+            [this]( const libp2p::peer::PeerId                        &peerId,
+                    libp2p::protocol::gossip::Gossip::ViolationType    type ) {
+                if ( type != libp2p::protocol::gossip::Gossip::ViolationType::SustainedWriteOverflow )
+                {
+                    return;
+                }
+                std::size_t closes = 0;
+                {
+                    std::lock_guard<std::mutex> lock( m_sustained_overflow_mutex );
+                    closes = ++m_sustainedOverflowCloses[peerId];
+                }
+                if ( closes >= kSustainedOverflowClosesToBlock )
+                {
+                    // Existing chain: logs via m_logger->info and feeds the
+                    // DenyListConnectionGater deny-set (GOSS-04/D-10)
+                    BlockPeer( peerId );
+                }
+            } );
 
         //Make a DHT
         auto kademlia = injector.template create<std::shared_ptr<libp2p::protocol::kademlia::Kademlia>>();

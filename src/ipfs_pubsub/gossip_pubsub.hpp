@@ -360,6 +360,16 @@ namespace sgns::ipfs_pubsub
         std::vector<std::shared_future<std::shared_ptr<Subscription>>> m_subscriptions;
         std::mutex                                                      m_subscriptions_mutex;
 
+        // Sustained-overflow escalation state (GOSS-03, D-09): per-peer count
+        // of gossip stream closes caused by sustained outbound overflow. The
+        // kSustainedOverflowClosesToBlock-th close of the same peer escalates
+        // through the existing BlockPeer() chain; one-episode tolerance is
+        // intentional (a single legitimate large CRDT burst must not block
+        // a peer). The handler may fire on the gossip/scheduler strand, so
+        // the map is mutex-guarded (deny-list discipline).
+        mutable std::mutex m_sustained_overflow_mutex;
+        std::unordered_map<libp2p::peer::PeerId, std::size_t> m_sustainedOverflowCloses;
+
         // Address monitoring and peer management
         std::shared_ptr<boost::asio::steady_timer> m_address_monitor_timer;
 
